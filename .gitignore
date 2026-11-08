@@ -1,26 +1,104 @@
-# Python environment
+# ==========================================
+# PYTHON ENVIRONMENTS
+# ==========================================
+
 .venv/
+venv/
 __pycache__/
 *.py[cod]
+*.egg-info/
 .pytest_cache/
 
-# Secrets and local configuration
+
+# ==========================================
+# JUPYTER
+# ==========================================
+
+.ipynb_checkpoints/
+
+
+# ==========================================
+# SECRETS AND LOCAL CONFIGURATION
+# ==========================================
+
 .env
 .env.*
 !.env.example
 
-# Generated camera and detection data
+**/.streamlit/secrets.toml
+
+
+# ==========================================
+# GENERATED CAMERA AND DETECTION DATA
+# ==========================================
+
 captured_frames/
 data/
+outputs/
+recordings/
+videos/
 
-# AI model files
+
+# ==========================================
+# AI MODEL FILES
+# ==========================================
+
 *.pt
 *.onnx
 
-# Logs
+
+# ==========================================
+# SPARK AND HADOOP LOCAL FILES
+# ==========================================
+
+metastore_db/
+derby.log
+spark-warehouse/
+warehouse/
+.spark-temp/
+
+
+# ==========================================
+# LOGS
+# ==========================================
+
 *.log
 
-# IDE and OS files
+
+# ==========================================
+# PYTHON BUILD ARTIFACTS
+# ==========================================
+
+build/
+dist/
+
+
+# ==========================================
+# IDE AND OS FILES
+# ==========================================
+
 .vscode/
 .idea/
 .DS_Store
+Thumbs.db
+
+
+
+
+# Spark and Hadoop
+**/metastore_db/
+**/derby.log
+**/spark-warehouse/
+**/warehouse/
+**/.spark-temp/
+**/*.parquet
+
+# Jupyter
+**/.ipynb_checkpoints/
+
+# Streamlit secrets
+**/.streamlit/secrets.toml
+
+# Generated build files
+build/
+dist/

@@ -1,0 +1,11 @@
+camera_id,zone_id,detector_type,enabled,kafka_partition
+001,A,person,TRUE,0
+002,A,person,TRUE,0
+003,B,person,TRUE,0
+004,B,person,TRUE,1
+005,C,person,TRUE,1
+006,D,person,TRUE,1
+007,D,person,TRUE,1
+008,E,plate,TRUE,0
+009,E,plate,TRUE,0
+010,E,plate,TRUE,0
