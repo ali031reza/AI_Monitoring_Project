@@ -19,6 +19,12 @@ from .paths import ProjectPaths
 
 
 # ============================================================
+# PROJECT PATHS
+# ============================================================
+from .camera_loader import CameraConfig, load_cameras
+
+
+# ============================================================
 # CONFIGURATION DATACLASSES
 # ============================================================
 
@@ -63,4 +69,8 @@ __all__ = [
 
     # Project paths
     "ProjectPaths",
+
+    #Camera loader
+    "CameraConfig",
+    "load_cameras",
 ]
