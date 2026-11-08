@@ -14,6 +14,7 @@ __pycache__/
 # JUPYTER
 # ==========================================
 
+*.ipynb
 .ipynb_checkpoints/
 
 
@@ -81,7 +82,6 @@ dist/
 .idea/
 .DS_Store
 Thumbs.db
-
 
 
 
