@@ -539,9 +539,10 @@ class ApplicationSettings:
             "Person detector worker ID",
         )
 
-        if not re.fullmatch(r"[A-Za-z0-9_-]+", worker_id):
+        if not re.fullmatch(r"worker[1-9]\d*", worker_id):
             raise ValueError(
-                f"Invalid person detector worker ID: {worker_id!r}"
+                f"Invalid person detector worker ID: {worker_id!r}. "
+                "Expected worker1, worker2, worker3, etc."
             )
 
         object.__setattr__(

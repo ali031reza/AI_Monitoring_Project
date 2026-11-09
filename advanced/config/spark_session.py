@@ -16,58 +16,65 @@ METASTORE_DIR = ETL_DIR / "metastore_db"
 SPARK_TEMP_DIR = ETL_DIR / ".spark-temp"
 
 
+
 def _configure_runtime_environment() -> None:
-    """Configure Java/Hadoop paths before the Spark JVM starts."""
+    """Configure Java and Python environments before Spark starts."""
+
+    # --------------------------------------------------------
+    # 1. Configure Java
+    # --------------------------------------------------------
 
     java_home = os.environ.get("JAVA_HOME")
 
     if java_home:
         java_bin = Path(java_home) / "bin"
-        java_executable = java_bin / ("java.exe" if os.name == "nt" else "java")
 
-        if not java_executable.exists():
+        java_executable = java_bin / (
+            "java.exe" if os.name == "nt" else "java"
+        )
+
+        if not java_executable.is_file():
             raise RuntimeError(
-                f"JAVA_HOME does not contain a Java executable: {java_executable}"
+                f"JAVA_HOME does not contain Java: {java_executable}"
             )
 
         os.environ["PATH"] = os.pathsep.join(
             [str(java_bin), os.environ.get("PATH", "")]
         )
+
     elif shutil.which("java") is None:
         raise RuntimeError(
             "Java was not found. Set JAVA_HOME or add Java to PATH."
         )
 
+    # --------------------------------------------------------
+    # 2. Configure optional Hadoop utilities on Windows
+    # --------------------------------------------------------
+
     if os.name == "nt":
+
         hadoop_home = os.environ.get("HADOOP_HOME")
 
-        if not hadoop_home:
-            raise RuntimeError(
-                "HADOOP_HOME is not set. Set it to the Hadoop directory "
-                "used by the project's Spark notebooks."
+        if hadoop_home:
+
+            hadoop_bin = Path(hadoop_home) / "bin"
+
+            winutils = hadoop_bin / "winutils.exe"
+
+            if not winutils.is_file():
+                raise FileNotFoundError(
+                    f"winutils.exe was not found: {winutils}"
+                )
+
+            os.environ["PATH"] = os.pathsep.join(
+                [str(hadoop_bin), os.environ.get("PATH", "")]
             )
 
-        hadoop_bin = Path(hadoop_home) / "bin"
-        required_files = (
-            hadoop_bin / "winutils.exe",
-            hadoop_bin / "hadoop.dll",
-            hadoop_bin / "hdfs.dll",
-        )
-        missing_files = [str(path) for path in required_files if not path.exists()]
+    # --------------------------------------------------------
+    # 3. Use the current virtual environment Python
+    # --------------------------------------------------------
 
-        if missing_files:
-            raise FileNotFoundError(
-                "Required Hadoop files were not found: "
-                + ", ".join(missing_files)
-            )
-
-        os.environ["PATH"] = os.pathsep.join(
-            [str(hadoop_bin), os.environ.get("PATH", "")]
-        )
-
-    # Keep Spark workers on the same Python environment as Streamlit.
     os.environ["PYSPARK_PYTHON"] = sys.executable
-
 
 def create_spark_session():
     """Create or retrieve the project's Hive-enabled local Spark session.
