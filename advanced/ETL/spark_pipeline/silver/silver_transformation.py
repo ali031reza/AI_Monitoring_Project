@@ -14,6 +14,8 @@ from pyspark.sql import DataFrame, SparkSession
 from pyspark.sql import functions as F
 from pyspark.sql import types as T
 
+from advanced.ETL.spark_pipeline.table_writer import append_unique_records
+
 
 logger = logging.getLogger(__name__)
 
@@ -194,8 +196,10 @@ class SilverTransformation:
         self,
         df: DataFrame,
         table_name: str,
-        mode: str = "overwrite",
+        mode: str = "append",
+        key_columns: tuple[str, ...] | None = None,
     ) -> None:
+        """Persist Silver event history or refresh a reference snapshot."""
 
         self._validate_table_name(table_name)
 
@@ -205,25 +209,41 @@ class SilverTransformation:
             )
 
         self._ensure_silver_database()
+        full_table_name = f"{self.target_database}.{table_name}"
 
-        full_table_name = (
-            f"{self.target_database}.{table_name}"
-        )
+        if mode == "append":
+            if not key_columns:
+                raise ValueError(
+                    "key_columns are required for append mode."
+                )
+
+            append_unique_records(
+                spark=self.spark,
+                dataframe=df,
+                table_name=full_table_name,
+                key_columns=key_columns,
+                logger=logger,
+                layer_name="Silver",
+            )
+            return
+
+        if key_columns:
+            raise ValueError(
+                "key_columns can only be used with append mode."
+            )
 
         logger.info(
-            "Writing Silver table: %s",
+            "Refreshing Silver reference snapshot: %s",
             full_table_name,
         )
-
         (
             df.write
             .format("parquet")
-            .mode(mode)
+            .mode("overwrite")
             .saveAsTable(full_table_name)
         )
-
         logger.info(
-            "Successfully written Silver table: %s",
+            "Successfully refreshed Silver reference snapshot: %s",
             full_table_name,
         )
 
@@ -473,6 +493,7 @@ class SilverTransformation:
         self._write_silver_table(
             combined_df,
             "person_detections",
+            key_columns=("event_id",),
         )
 
         logger.info(
@@ -533,6 +554,7 @@ class SilverTransformation:
         self._write_silver_table(
             details_df,
             "person_detection_details",
+            key_columns=("event_id", "employee_id"),
         )
 
         return details_df
@@ -583,6 +605,7 @@ class SilverTransformation:
         self._write_silver_table(
             df,
             "plate_detections",
+            key_columns=("event_id",),
         )
 
         return df
@@ -636,6 +659,7 @@ class SilverTransformation:
         self._write_silver_table(
             df,
             "employees",
+            mode="overwrite",
         )
 
         return df
@@ -726,6 +750,7 @@ class SilverTransformation:
         self._write_silver_table(
             df,
             "cameras",
+            mode="overwrite",
         )
 
         return df
@@ -770,6 +795,7 @@ class SilverTransformation:
         self._write_silver_table(
             df,
             "restricted_access",
+            mode="overwrite",
         )
 
         return df

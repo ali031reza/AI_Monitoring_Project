@@ -315,6 +315,7 @@ def test_write_gold_table_success(pipeline):
     pipeline._write_gold_table(
         df,
         "test_table",
+        mode="overwrite",
     )
 
     table_name = (
@@ -330,6 +331,24 @@ def test_write_gold_table_success(pipeline):
     assert stored.count() == 1
 
     assert stored.first()["employee_id"] == "001"
+
+
+def test_append_mode_requires_stable_keys(pipeline):
+
+    df = pipeline.spark.createDataFrame(
+        [("event-001",)],
+        ["event_id"],
+    )
+
+    with pytest.raises(
+        ValueError,
+        match="key_columns are required",
+    ):
+
+        pipeline._write_gold_table(
+            df,
+            "event_table",
+        )
 
 
 def test_write_gold_table_rejects_invalid_name(
@@ -375,6 +394,7 @@ def test_write_gold_table_rejects_missing_database(
         missing_database_pipeline._write_gold_table(
             df,
             "test_table",
+            mode="overwrite",
         )
 
 
@@ -903,6 +923,53 @@ def test_monitoring_events_combine_person_and_plate(
     )
 
 
+
+def test_monitoring_events_append_new_events_without_replacing_history(
+    pipeline,
+):
+    create_employees(pipeline, [("001", "AB123")])
+
+    first_rows = [
+        (
+            timestamp(),
+            "A",
+            ["001"],
+            [True],
+            "cam1",
+            "person-event-001",
+            "person",
+        ),
+    ]
+    create_person_events(pipeline, first_rows)
+    create_plate_events(pipeline, [])
+
+    assert pipeline.transform_monitoring_events().count() == 1
+
+    second_rows = first_rows + [
+        (
+            timestamp(1),
+            "B",
+            ["001"],
+            [False],
+            "cam2",
+            "person-event-002",
+            "person",
+        ),
+    ]
+    create_person_events(pipeline, second_rows)
+
+    assert pipeline.transform_monitoring_events().count() == 2
+    pipeline.transform_monitoring_events()
+
+    stored = pipeline.spark.table(
+        f"{pipeline.target_database}.monitoring_events"
+    )
+    assert stored.count() == 2
+    assert {
+        row.event_id for row in stored.select("event_id").collect()
+    } == {"person-event-001", "person-event-002"}
+
+
 def test_monitoring_events_person_schema(
     pipeline,
 ):
@@ -1033,6 +1100,55 @@ def test_monitoring_detection_details_combine_sources(
     assert sources.count("person") == 1
 
     assert sources.count("plate") == 2
+
+
+
+def test_monitoring_detection_details_are_idempotent_for_nullable_keys(
+    pipeline,
+):
+    create_employees(pipeline, [("001", "AB123")])
+
+    create_person_details(
+        pipeline,
+        [
+            (
+                timestamp(),
+                "A",
+                "cam1",
+                "person-event-001",
+                "person",
+                "001",
+                True,
+            ),
+        ],
+    )
+    create_plate_events(
+        pipeline,
+        [
+            (
+                timestamp(1),
+                "E",
+                ["AB123", "UNKNOWN"],
+                "cam8",
+                "plate-event-001",
+                "plate",
+            ),
+        ],
+    )
+
+    assert pipeline.transform_monitoring_detection_details().count() == 3
+    pipeline.transform_monitoring_detection_details()
+
+    stored = pipeline.spark.table(
+        f"{pipeline.target_database}.monitoring_detection_details"
+    )
+    assert stored.count() == 3
+
+    unknown_plate = stored.filter(
+        (F.col("detection_source") == "plate")
+        & (F.col("plate_number") == "UNKNOWN")
+    )
+    assert unknown_plate.count() == 1
 
 
 def test_monitoring_detection_details_person_record(

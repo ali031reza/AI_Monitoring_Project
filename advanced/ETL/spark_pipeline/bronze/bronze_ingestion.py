@@ -22,6 +22,7 @@ from pathlib import Path
 from pyspark.sql import DataFrame, SparkSession
 
 from advanced.config import ApplicationSettings
+from advanced.ETL.spark_pipeline.table_writer import append_unique_records
 
 
 logger = logging.getLogger(__name__)
@@ -426,13 +427,10 @@ class BronzeIngestion:
         self,
         dataframe: DataFrame,
         table_name: str,
-        mode: str = "overwrite",
+        mode: str = "append",
+        key_columns: tuple[str, ...] | None = None,
     ) -> None:
-        """
-        Write a DataFrame into the Bronze database.
-
-        Storage format: Parquet.
-        """
+        """Persist Bronze event history or refresh a reference snapshot."""
 
         if not isinstance(table_name, str) or not re.fullmatch(
             r"[A-Za-z_][A-Za-z0-9_]*",
@@ -448,25 +446,41 @@ class BronzeIngestion:
             )
 
         self._ensure_database()
+        full_table_name = f"{self.DATABASE}.{table_name}"
 
-        full_table_name = (
-            f"{self.DATABASE}.{table_name}"
-        )
+        if mode == "append":
+            if not key_columns:
+                raise ValueError(
+                    "key_columns are required for append mode."
+                )
+
+            append_unique_records(
+                spark=self.spark,
+                dataframe=dataframe,
+                table_name=full_table_name,
+                key_columns=key_columns,
+                logger=logger,
+                layer_name="Bronze",
+            )
+            return
+
+        if key_columns:
+            raise ValueError(
+                "key_columns can only be used with append mode."
+            )
 
         logger.info(
-            "Writing Bronze table: %s",
+            "Refreshing Bronze reference snapshot: %s",
             full_table_name,
         )
-
         (
             dataframe.write
             .format("parquet")
             .mode(mode)
             .saveAsTable(full_table_name)
         )
-
         logger.info(
-            "Successfully written Bronze table: %s",
+            "Successfully refreshed Bronze reference snapshot: %s",
             full_table_name,
         )
 
@@ -501,6 +515,7 @@ class BronzeIngestion:
             self._write_table(
                 dataframe=dataframe,
                 table_name=table_name,
+                key_columns=("event_id",),
             )
 
         logger.info(
@@ -538,6 +553,7 @@ class BronzeIngestion:
         self._write_table(
             dataframe=dataframe,
             table_name="plate_detections",
+            key_columns=("event_id",),
         )
 
     # ========================================================
@@ -561,6 +577,7 @@ class BronzeIngestion:
         self._write_table(
             dataframe=dataframe,
             table_name="employees",
+            mode="overwrite",
         )
 
     # ========================================================
@@ -584,6 +601,7 @@ class BronzeIngestion:
         self._write_table(
             dataframe=dataframe,
             table_name="cameras",
+            mode="overwrite",
         )
 
     # ========================================================
@@ -607,6 +625,7 @@ class BronzeIngestion:
         self._write_table(
             dataframe=dataframe,
             table_name="restricted_access",
+            mode="overwrite",
         )
 
     # ========================================================

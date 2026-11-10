@@ -350,6 +350,7 @@ def test_write_table(bronze):
     bronze._write_table(
         dataframe=dataframe,
         table_name="test_table",
+        mode="overwrite",
     )
 
     dataframe.write.format.assert_called_once_with("parquet")
@@ -359,6 +360,19 @@ def test_write_table(bronze):
     writer.saveAsTable.assert_called_once_with(
         "bronze.test_table"
     )
+
+
+def test_append_mode_requires_stable_keys(bronze):
+
+    with pytest.raises(
+        ValueError,
+        match="key_columns are required",
+    ):
+
+        bronze._write_table(
+            dataframe=MagicMock(),
+            table_name="event_table",
+        )
 
 
 def test_write_table_rejects_invalid_name(bronze):
@@ -435,6 +449,11 @@ def test_worker_ingestion_uses_correct_table_names(
         "person_detections_worker1",
         "person_detections_worker2",
     ]
+
+    assert all(
+        item.kwargs["key_columns"] == ("event_id",)
+        for item in write_mock.call_args_list
+    )
 
 
 # ============================================================

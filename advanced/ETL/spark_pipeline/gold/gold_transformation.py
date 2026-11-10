@@ -28,6 +28,8 @@ from pyspark.sql import DataFrame, SparkSession
 from pyspark.sql import functions as F
 from pyspark.sql import types as T
 
+from advanced.ETL.spark_pipeline.table_writer import append_unique_records
+
 
 logger = logging.getLogger(__name__)
 
@@ -197,9 +199,10 @@ class GoldTransformation:
         self,
         df: DataFrame,
         table_name: str,
-        mode: str = "overwrite",
+        mode: str = "append",
+        key_columns: tuple[str, ...] | None = None,
     ) -> None:
-        """Write a DataFrame into an existing Gold database as Parquet."""
+        """Append unseen analytical facts or refresh a current snapshot."""
 
         self._validate_table_name(
             table_name,
@@ -214,33 +217,50 @@ class GoldTransformation:
         if normalized_mode not in self.VALID_WRITE_MODES:
             raise ValueError(f"Invalid write mode: {mode!r}")
 
-        # Verify that the target database already exists.
-        # Do not silently create it here.
         existing_databases = {
             database.name.casefold()
             for database in self.spark.catalog.listDatabases()
         }
-
         if self.target_database.casefold() not in existing_databases:
             raise ValueError(
                 f"Gold database does not exist: {self.target_database}"
             )
 
-        full_table_name = (
-            f"{self.target_database}.{table_name}"
+        full_table_name = f"{self.target_database}.{table_name}"
+
+        if normalized_mode == "append":
+            if not key_columns:
+                raise ValueError(
+                    "key_columns are required for append mode."
+                )
+
+            append_unique_records(
+                spark=self.spark,
+                dataframe=df,
+                table_name=full_table_name,
+                key_columns=key_columns,
+                logger=logger,
+                layer_name="Gold",
+            )
+            return
+
+        if key_columns:
+            raise ValueError(
+                "key_columns can only be used with append mode."
+            )
+
+        logger.info(
+            "Refreshing Gold reference snapshot: %s",
+            full_table_name,
         )
-
-        logger.info("Writing Gold table: %s", full_table_name)
-
         (
             df.write
             .format("parquet")
             .mode(normalized_mode)
             .saveAsTable(full_table_name)
         )
-
         logger.info(
-            "Successfully written Gold table: %s",
+            "Successfully refreshed Gold reference snapshot: %s",
             full_table_name,
         )
 
@@ -432,6 +452,7 @@ class GoldTransformation:
         self._write_gold_table(
             employee_directory_df,
             "employee_directory",
+            mode="overwrite",
         )
 
         logger.info("Employee directory transformation completed.")
@@ -814,6 +835,7 @@ class GoldTransformation:
         self._write_gold_table(
             monitoring_events_df,
             "monitoring_events",
+            key_columns=("event_id",),
         )
 
         logger.info("Unified monitoring events completed.")
@@ -960,6 +982,12 @@ class GoldTransformation:
         self._write_gold_table(
             monitoring_detection_details_df,
             "monitoring_detection_details",
+            key_columns=(
+                "event_id",
+                "detection_source",
+                "employee_id",
+                "plate_number",
+            ),
         )
 
         logger.info(
@@ -1019,6 +1047,7 @@ class GoldTransformation:
         self._write_gold_table(
             restricted_df,
             "restricted_access",
+            mode="overwrite",
         )
 
         logger.info("Restricted access transformation completed.")

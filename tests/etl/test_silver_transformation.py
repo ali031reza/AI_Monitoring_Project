@@ -847,6 +847,143 @@ def test_restricted_access_rejects_empty_employee(
         pipeline.transform_restricted_access()
 
 
+
+def test_append_mode_requires_stable_keys(pipeline):
+
+    df = pipeline.spark.createDataFrame(
+        [("event-001",)],
+        ["event_id"],
+    )
+
+    with pytest.raises(
+        ValueError,
+        match="key_columns are required",
+    ):
+
+        pipeline._write_silver_table(
+            df,
+            "event_table",
+        )
+
+
+def test_person_detections_append_new_events_without_replacing_history(
+    pipeline,
+):
+    first_rows = [
+        (
+            "2026-11-09 10:00:00",
+            "A",
+            '["001"]',
+            "[true]",
+            "cam1",
+            "event-001",
+            "person",
+        ),
+    ]
+    create_person_worker(pipeline, 1, first_rows)
+
+    assert pipeline.transform_person_detections().count() == 1
+
+    second_rows = first_rows + [
+        (
+            "2026-11-09 10:01:00",
+            "A",
+            '["002"]',
+            "[false]",
+            "cam1",
+            "event-002",
+            "person",
+        ),
+    ]
+    create_person_worker(pipeline, 1, second_rows)
+
+    assert pipeline.transform_person_detections().count() == 2
+    pipeline.transform_person_detections()
+
+    stored = pipeline.spark.table(
+        f"{pipeline.target_database}.person_detections"
+    )
+    assert stored.count() == 2
+    assert {
+        row.event_id for row in stored.select("event_id").collect()
+    } == {"event-001", "event-002"}
+
+
+def test_person_detection_details_are_idempotent(pipeline):
+
+    create_person_worker(
+        pipeline,
+        1,
+        [
+            (
+                "2026-11-09 10:00:00",
+                "A",
+                '["001", "002"]',
+                "[true, false]",
+                "cam1",
+                "event-001",
+                "person",
+            ),
+        ],
+    )
+    pipeline.transform_person_detections()
+
+    assert pipeline.transform_person_detection_details().count() == 2
+    pipeline.transform_person_detection_details()
+
+    stored = pipeline.spark.table(
+        f"{pipeline.target_database}.person_detection_details"
+    )
+    assert stored.count() == 2
+
+
+def test_plate_detections_append_new_events_without_duplicates(pipeline):
+
+    first_rows = [
+        (
+            "2026-11-09 10:00:00",
+            "E",
+            '["AB123"]',
+            "cam8",
+            "plate-event-001",
+            "plate",
+        ),
+    ]
+    write_table(
+        pipeline.spark,
+        pipeline.source_database,
+        "plate_detections",
+        PLATE_COLUMNS,
+        first_rows,
+    )
+    pipeline.transform_plate_detections()
+
+    second_rows = first_rows + [
+        (
+            "2026-11-09 10:01:00",
+            "E",
+            '["CD456"]',
+            "cam8",
+            "plate-event-002",
+            "plate",
+        ),
+    ]
+    write_table(
+        pipeline.spark,
+        pipeline.source_database,
+        "plate_detections",
+        PLATE_COLUMNS,
+        second_rows,
+    )
+    pipeline.transform_plate_detections()
+    pipeline.transform_plate_detections()
+
+    stored = pipeline.spark.table(
+        f"{pipeline.target_database}.plate_detections"
+    )
+    assert stored.count() == 2
+
+
 # ============================================================
 # 10. SILVER WRITER TESTS
 # ============================================================
@@ -863,6 +1000,7 @@ def test_write_silver_table(
     pipeline._write_silver_table(
         df,
         "test_table",
+        mode="overwrite",
     )
 
     assert pipeline.spark.catalog.tableExists(
