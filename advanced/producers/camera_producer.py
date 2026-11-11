@@ -275,6 +275,10 @@ class CameraProducer:
                     self.metrics_collector.increment_counter(
                         "messages_failed"
                     )
+                    detector_type = self._camera_by_id[camera_id].detector_type
+                    self.metrics_collector.increment_counter(
+                        f"messages_failed_{detector_type}"
+                    )
                     self.metrics_collector.observe_latency_ms(
                         "producer_delivery",
                         delivery_ms,
@@ -295,6 +299,10 @@ class CameraProducer:
             if self.metrics_collector is not None:
                 self.metrics_collector.increment_counter(
                     "messages_delivered"
+                )
+                detector_type = self._camera_by_id[camera_id].detector_type
+                self.metrics_collector.increment_counter(
+                    f"messages_delivered_{detector_type}"
                 )
                 self.metrics_collector.observe_latency_ms(
                     "producer_delivery",
@@ -375,8 +383,16 @@ class CameraProducer:
                     self.metrics_collector.increment_counter(
                         "messages_queued"
                     )
+                    detector_type = self._camera_by_id[camera_id].detector_type
+                    self.metrics_collector.increment_counter(
+                        f"messages_queued_{detector_type}"
+                    )
                     self.metrics_collector.increment_counter(
                         "payload_bytes",
+                        len(jpeg_bytes),
+                    )
+                    self.metrics_collector.increment_counter(
+                        f"payload_bytes_{detector_type}",
                         len(jpeg_bytes),
                     )
                     try:
@@ -462,6 +478,9 @@ class CameraProducer:
             if self.metrics_collector is not None:
                 self.metrics_collector.increment_counter(
                     "frames_generated"
+                )
+                self.metrics_collector.increment_counter(
+                    f"frames_generated_{camera.detector_type}"
                 )
                 self.metrics_collector.observe_latency_ms(
                     "frame_read_encode",
