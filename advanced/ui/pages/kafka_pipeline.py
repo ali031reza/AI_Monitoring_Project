@@ -9,22 +9,15 @@ import pandas as pd
 import streamlit as st
 
 from advanced.config import ProjectPaths, load_cameras
-from advanced.performance_monitoring.pipeline_controller import PipelineController
 from advanced.performance_monitoring.run_metadata import (
     build_yolo_reference_estimate,
 )
+from advanced.ui.pipeline_state import get_pipeline_controller
 
 
 # ============================================================
 # 1. SHARED UI RESOURCES AND METRIC READERS
 # ============================================================
-
-@st.cache_resource
-def get_pipeline_controller() -> PipelineController:
-    """Keep one process controller across Streamlit reruns."""
-
-    return PipelineController()
-
 
 @st.cache_data(ttl=60)
 def get_camera_mix() -> float:
