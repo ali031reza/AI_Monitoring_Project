@@ -101,6 +101,11 @@ def _throughput_history(run_dir: Path) -> pd.DataFrame:
 
     add_record(
         run_dir / "producer_metrics.jsonl",
+        "frames_generated",
+        "Frames generated",
+    )
+    add_record(
+        run_dir / "producer_metrics.jsonl",
         "messages_delivered",
         "Producer delivered",
     )
@@ -119,6 +124,7 @@ def _throughput_history(run_dir: Path) -> pd.DataFrame:
     dataframe = dataframe.sort_index()
 
     for column in (
+        "Frames generated",
         "Producer delivered",
         "Person processed",
         "Plate processed",
@@ -127,6 +133,7 @@ def _throughput_history(run_dir: Path) -> pd.DataFrame:
             dataframe[column] = 0.0
 
     return dataframe[[
+        "Frames generated",
         "Producer delivered",
         "Person processed",
         "Plate processed",
@@ -301,6 +308,7 @@ def _latest_rates(run_dir: Path) -> dict:
     plate_p95 = [value for value in plate_p95 if value is not None]
 
     return {
+        "producer_frames": producer_rates.get("frames_generated"),
         "producer_delivered": producer_rates.get("messages_delivered"),
         "producer_bytes": producer_rates.get("payload_bytes"),
         "producer_queue": producer.get("gauges", {}).get("producer_queue_depth"),
@@ -323,7 +331,11 @@ def render_live_metrics(run_directory: Path, process_controller: PipelineControl
     rates = _latest_rates(run_directory)
     lag_rows, total_lag = _latest_lag_rows(run_directory)
 
-    producer_col, person_col, plate_col, lag_col = st.columns(4)
+    frames_col, producer_col, person_col, plate_col, lag_col = st.columns(5)
+    frames_col.metric(
+        "Frames generated",
+        f"{_number(rates['producer_frames'])} frames/s",
+    )
     producer_col.metric(
         "Producer delivered",
         f"{_number(rates['producer_delivered'])} msg/s",
@@ -372,7 +384,7 @@ def render_live_metrics(run_directory: Path, process_controller: PipelineControl
 
     payload = _payload_history(run_directory)
     if not payload.empty:
-        st.markdown("#### Producer payload rate")
+        st.markdown("#### Producer queued payload rate")
         st.line_chart(payload)
 
     lag_history = _lag_history(run_directory)
