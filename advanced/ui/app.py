@@ -36,11 +36,11 @@ pages = {
     "OPERATIONS": [
         st.Page("pages/kafka_pipeline.py", title="Kafka Pipeline", icon="📈", default=True),
         st.Page("pages/dashboard.py", title="Overview", icon="📊"),
+        st.Page("pages/person_monitoring.py", title="Person Monitoring", icon="👤"),
         st.Page("pages/events_alerts.py", title="Observation Explorer", icon="📋"),
         st.Page("pages/camera_monitoring.py", title="Camera Inventory", icon="📹"),
     ],
     "INVESTIGATIONS": [
-        st.Page("pages/person_monitoring.py", title="Person Monitoring", icon="👤"),
         st.Page("pages/security_access.py", title="Access Review", icon="🛡️"),
         st.Page("pages/employee_connections.py", title="Co-observation", icon="🔗"),
     ],
