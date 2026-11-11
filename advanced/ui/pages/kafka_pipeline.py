@@ -343,7 +343,7 @@ def render_live_metrics(run_directory: Path, process_controller: PipelineControl
 
     bytes_col, queue_col, delivery_col, person_latency_col, plate_latency_col = st.columns(5)
     bytes_col.metric(
-        "Payload throughput",
+        "Payload queued",
         f"{_number((rates['producer_bytes'] or 0) / (1024 * 1024))} MB/s",
     )
     queue_col.metric(
@@ -355,11 +355,11 @@ def render_live_metrics(run_directory: Path, process_controller: PipelineControl
         f"{_number(rates['producer_delivery_p95'])} ms",
     )
     person_latency_col.metric(
-        "Person processing p95",
+        "Worst person worker p95",
         f"{_number(rates['person_processing_p95'])} ms",
     )
     plate_latency_col.metric(
-        "Plate processing p95",
+        "Worst plate worker p95",
         f"{_number(rates['plate_processing_p95'])} ms",
     )
 
@@ -442,7 +442,7 @@ with st.container(border=True):
 
     camera_count = st.slider(
         "Number of active cameras",
-        min_value=2,
+        min_value=5,
         max_value=40,
         value=10,
         step=1,
