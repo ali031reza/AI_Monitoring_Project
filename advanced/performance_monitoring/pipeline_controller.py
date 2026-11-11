@@ -189,16 +189,22 @@ class PipelineController:
             if (
                 isinstance(fps_per_camera, bool)
                 or not isinstance(fps_per_camera, (int, float))
-                or fps_per_camera <= 0
+                or not 1 <= fps_per_camera <= 20
             ):
-                raise ValueError("fps_per_camera must be positive")
+                raise ValueError("fps_per_camera must be between 1 and 20")
 
-            for name, value in (
-                ("person_workers", person_workers),
-                ("plate_workers", plate_workers),
+            for name, value, maximum in (
+                ("person_workers", person_workers, 8),
+                ("plate_workers", plate_workers, 4),
             ):
-                if isinstance(value, bool) or not isinstance(value, int) or value < 1:
-                    raise ValueError(f"{name} must be a positive integer")
+                if (
+                    isinstance(value, bool)
+                    or not isinstance(value, int)
+                    or not 1 <= value <= maximum
+                ):
+                    raise ValueError(
+                        f"{name} must be between 1 and {maximum}"
+                    )
 
             for handle in self._log_handles.values():
                 try:
@@ -213,6 +219,10 @@ class PipelineController:
                 1.0 / float(fps_per_camera)
             )
             settings = load_settings(environ=environment)
+            if not settings.paths.camera_sample_video.is_file():
+                raise FileNotFoundError(
+                    f"Camera sample video not found: {settings.paths.camera_sample_video}"
+                )
             base_cameras = load_cameras(settings.paths.cameras_csv)
 
             actual_partitions = self._ensure_topics(
