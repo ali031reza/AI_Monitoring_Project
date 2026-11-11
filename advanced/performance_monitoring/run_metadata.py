@@ -7,12 +7,13 @@ Responsibilities:
 - Record enabled camera configurations.
 - Record Kafka topics and partition assignments.
 - Record detector worker counts and processing delays.
-- Store YOLO11n reference benchmark assumptions.
+- Store YOLO11n benchmark-based reference estimates.
 - Record the current Git revision.
 - Save metadata as a JSON file for each experiment.
 
-Metadata describes the experimental configuration.
-It does not collect runtime performance measurements.
+Metadata describes the experimental configuration and external
+reference estimates. It does not collect hardware utilization or
+execute YOLO inference.
 """
 
 from __future__ import annotations
@@ -42,6 +43,8 @@ from advanced.config import (
 # 1. LOGGING AND CONSTANTS
 # ============================================================
 
+DETECTOR_TYPES = ("person", "plate")
+
 YOLO_REFERENCE = {
     "model": "YOLO11n",
     "parameters_millions": 2.6,
@@ -65,17 +68,13 @@ YOLO_REFERENCE = {
         "fp32_per_instance": 10.4,
         "fp16_per_instance": 5.2,
     },
-    "source_url": (
-        "https://docs.ultralytics.com/models/yolo11/"
-    ),
+    "source_url": "https://docs.ultralytics.com/models/yolo11/",
     "note": (
-        "Reference benchmark assumptions only. "
+        "CPU/GPU latency values are published model-only benchmarks. "
+        "Weight memory is derived from parameter count and precision. "
         "YOLO inference is not executed by this project."
     ),
 }
-
-
-DETECTOR_TYPES = ("person", "plate")
 
 
 # ============================================================
@@ -107,10 +106,10 @@ def _validate_worker_configuration(
         if (
             isinstance(count, bool)
             or not isinstance(count, int)
-            or count < 1
+            or not 1 <= count <= 20
         ):
             raise ValueError(
-                f"Invalid worker count for {detector_type}"
+                f"Worker count for {detector_type} must be between 1 and 20"
             )
 
         delay = processing_delays_seconds[detector_type]
@@ -428,58 +427,94 @@ def _collect_worker_metadata(
     }
 
 
-# ============================================================
-# 8. YOLO REFERENCE METADATA
-# ============================================================
-
-def _collect_yolo_metadata(
-    total_worker_count: int,
+def build_yolo_reference_estimate(
+    person_workers: int,
+    plate_workers: int,
 ) -> dict[str, Any]:
     """
-    Collect fixed YOLO reference assumptions.
+    Build a benchmark-based YOLO11n reference estimate.
 
-    One model instance per declared worker is assumed.
-    These values are not measured by the application.
+    The memory estimate covers model weights only. It is not a
+    measurement of complete process RAM or GPU memory usage.
     """
 
-    reference = dict(YOLO_REFERENCE)
+    worker_counts = {
+        "person": person_workers,
+        "plate": plate_workers,
+    }
+    for detector, count in worker_counts.items():
+        if (
+            isinstance(count, bool)
+            or not isinstance(count, int)
+            or not 1 <= count <= 20
+        ):
+            raise ValueError(
+                f"{detector} workers must be between 1 and 20"
+            )
 
-    fp32_per_instance = (
-        reference["weight_memory_estimate_mb"]
-        ["fp32_per_instance"]
-    )
+    total_workers = sum(worker_counts.values())
+    cpu_latency = YOLO_REFERENCE["cpu_benchmark"][
+        "latency_ms_per_image"
+    ]
+    gpu_latency = YOLO_REFERENCE["gpu_benchmark"][
+        "latency_ms_per_image"
+    ]
+    fp32_per_worker = YOLO_REFERENCE["weight_memory_estimate_mb"][
+        "fp32_per_instance"
+    ]
+    fp16_per_worker = YOLO_REFERENCE["weight_memory_estimate_mb"][
+        "fp16_per_instance"
+    ]
 
-    fp16_per_instance = (
-        reference["weight_memory_estimate_mb"]
-        ["fp16_per_instance"]
-    )
-
-    reference["assumed_model_instances"] = (
-        total_worker_count
-    )
-
-    reference["weight_memory_estimate_mb"] = {
-        "fp32_per_instance": fp32_per_instance,
-        "fp32_all_instances": (
-            fp32_per_instance * total_worker_count
+    return {
+        "model": YOLO_REFERENCE["model"],
+        "input_resolution": dict(YOLO_REFERENCE["input_resolution"]),
+        "batch_size": YOLO_REFERENCE["batch_size"],
+        "parameters_millions": YOLO_REFERENCE["parameters_millions"],
+        "flops_billions": YOLO_REFERENCE["flops_billions"],
+        "worker_instances": {
+            **worker_counts,
+            "total": total_workers,
+        },
+        "cpu_benchmark": {
+            **YOLO_REFERENCE["cpu_benchmark"],
+            "idealized_images_per_second_per_worker": round(
+                1000.0 / cpu_latency,
+                2,
+            ),
+        },
+        "gpu_benchmark": {
+            **YOLO_REFERENCE["gpu_benchmark"],
+            "idealized_images_per_second_per_worker": round(
+                1000.0 / gpu_latency,
+                2,
+            ),
+        },
+        "model_weight_memory_estimate_mb": {
+            "fp32_per_worker": fp32_per_worker,
+            "fp32_all_workers": round(
+                fp32_per_worker * total_workers,
+                2,
+            ),
+            "fp16_per_worker": fp16_per_worker,
+            "fp16_all_workers": round(
+                fp16_per_worker * total_workers,
+                2,
+            ),
+        },
+        "memory_scope": (
+            "Model weights only. Excludes Python/runtime overhead, "
+            "activations, input buffers, preprocessing and postprocessing."
         ),
-        "fp16_per_instance": fp16_per_instance,
-        "fp16_all_instances": (
-            fp16_per_instance * total_worker_count
-        ),
+        "source_url": YOLO_REFERENCE["source_url"],
+        "measurement_status": "reference_estimate_not_measured",
+        "note": YOLO_REFERENCE["note"],
     }
 
-    reference["memory_scope"] = (
-        "Model weights only. Excludes runtime, "
-        "activation buffers and framework overhead."
-    )
 
-    return reference
-
-
-# ============================================================
-# 9. BUILD RUN METADATA
-# ============================================================
+# ========================================================
+# 8. BUILD RUN METADATA
+# ========================================================
 
 def build_run_metadata(
     settings: ApplicationSettings,
@@ -532,10 +567,6 @@ def build_run_metadata(
 
     camera_list = _validate_cameras(cameras)
 
-    total_workers = sum(
-        worker_counts.values()
-    )
-
     project_root = settings.paths.advanced_dir.parent
 
     return {
@@ -571,28 +602,29 @@ def build_run_metadata(
             processing_delays_seconds,
         ),
 
-        "yolo_reference": _collect_yolo_metadata(
-            total_workers
+        "yolo_reference": build_yolo_reference_estimate(
+            worker_counts["person"],
+            worker_counts["plate"],
         ),
 
         "measurement_policy": {
             "kafka_and_application_metrics": (
-                "Collected from actual application execution."
+                "Collected from actual producer and consumer execution."
             ),
-
-            "yolo_resource_metrics": (
-                "Reference benchmark estimates, not measured."
+            "host_resource_metrics": (
+                "CPU, RAM and GPU utilization are not collected by the "
+                "current mock detector implementation."
             ),
-
-            "full_ram_and_vram": (
-                "Not estimated or reported as measured."
+            "inference_metrics": (
+                "The detector workers use mock simulation; no model inference "
+                "is executed."
             ),
         },
     }
 
 
 # ============================================================
-# 10. SAVE RUN METADATA
+# 9. SAVE RUN METADATA
 # ============================================================
 
 def write_run_metadata(
@@ -659,7 +691,7 @@ def write_run_metadata(
 
 
 # ============================================================
-# 11. COMMAND-LINE ENTRY POINT
+# 10. COMMAND-LINE ENTRY POINT
 # ============================================================
 
 def main() -> None:

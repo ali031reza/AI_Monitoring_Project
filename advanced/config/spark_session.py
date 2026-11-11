@@ -15,6 +15,9 @@ WAREHOUSE_DIR = ETL_DIR / "warehouse"
 METASTORE_DIR = ETL_DIR / "metastore_db"
 SPARK_TEMP_DIR = ETL_DIR / ".spark-temp"
 
+# Keep Windows DLL search-directory handles alive for the lifetime of the
+# process. Python 3.8+ uses AddDllDirectory for dependent native libraries.
+_DLL_DIRECTORY_HANDLES = []
 
 
 def _configure_runtime_environment() -> None:
@@ -48,26 +51,51 @@ def _configure_runtime_environment() -> None:
         )
 
     # --------------------------------------------------------
-    # 2. Configure optional Hadoop utilities on Windows
+    # 2. Configure required Hadoop native libraries on Windows
     # --------------------------------------------------------
 
     if os.name == "nt":
 
         hadoop_home = os.environ.get("HADOOP_HOME")
 
-        if hadoop_home:
+        if not hadoop_home:
+            raise RuntimeError(
+                "HADOOP_HOME is not set. On Windows, point it to the Hadoop "
+                "distribution whose native binaries match the Hadoop version "
+                "bundled with this environment's PySpark installation."
+            )
 
-            hadoop_bin = Path(hadoop_home) / "bin"
+        hadoop_bin = Path(hadoop_home).resolve() / "bin"
 
-            winutils = hadoop_bin / "winutils.exe"
+        required_binaries = (
+            "winutils.exe",
+            "hadoop.dll",
+            "hdfs.dll",
+        )
+        missing_binaries = [
+            name
+            for name in required_binaries
+            if not (hadoop_bin / name).is_file()
+        ]
+        if missing_binaries:
+            missing = ", ".join(missing_binaries)
+            raise FileNotFoundError(
+                f"Missing Hadoop Windows binaries in {hadoop_bin}: {missing}. "
+                "Install the native binaries matching the Hadoop version "
+                "bundled with PySpark."
+            )
 
-            if not winutils.is_file():
-                raise FileNotFoundError(
-                    f"winutils.exe was not found: {winutils}"
-                )
+        # Put this Hadoop distribution first so an older copy elsewhere on
+        # PATH cannot be selected by the JVM.
+        os.environ["PATH"] = os.pathsep.join(
+            [str(hadoop_bin), os.environ.get("PATH", "")]
+        )
 
-            os.environ["PATH"] = os.pathsep.join(
-                [str(hadoop_bin), os.environ.get("PATH", "")]
+        # Register the directory for dependent DLL resolution on modern
+        # Python/Windows runtimes, and retain the handle for the process life.
+        if hasattr(os, "add_dll_directory"):
+            _DLL_DIRECTORY_HANDLES.append(
+                os.add_dll_directory(str(hadoop_bin))
             )
 
     # --------------------------------------------------------
@@ -75,6 +103,7 @@ def _configure_runtime_environment() -> None:
     # --------------------------------------------------------
 
     os.environ["PYSPARK_PYTHON"] = sys.executable
+
 
 def create_spark_session():
     """Create or retrieve the project's Hive-enabled local Spark session.

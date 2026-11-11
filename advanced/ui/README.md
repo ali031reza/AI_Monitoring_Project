@@ -35,8 +35,24 @@ Then run Streamlit:
 ```
 
 The Windows Hadoop directory is expected to contain `bin\winutils.exe`,
-`bin\hadoop.dll`, and `bin\hdfs.dll`, matching the checks in the ETL
-notebooks.
+`bin\hadoop.dll`, and `bin\hdfs.dll`. The native DLLs must match the
+Hadoop version bundled inside the active virtual environment's PySpark
+installation; a different Hadoop release on `PATH` can produce
+`UnsatisfiedLinkError` failures such as
+`NativeIO$Windows.access0`. The Spark startup code validates the required
+files, places this Hadoop `bin` directory first on `PATH`, and registers
+it for Windows DLL dependency resolution.
+
+To inspect the Hadoop jars used by the active virtual environment:
+
+```powershell
+Get-ChildItem .\.venv\Lib\site-packages\pyspark\jars\hadoop-*.jar |
+    Select-Object -ExpandProperty Name
+```
+
+If native-library linkage fails, stop every Streamlit, Python, Spark and
+Jupyter process before correcting the Hadoop binaries and restarting from
+the updated PowerShell environment. A running JVM cannot reload native DLLs.
 
 ## Important: Derby metastore lock
 
@@ -77,3 +93,67 @@ reflects the most recently persisted Gold tables.
 A plate-to-employee match is an association and is not evidence that the
 employee was physically present. Raw detections are not automatically
 classified as security alerts.
+
+
+## Kafka Pipeline page
+
+The **Kafka Pipeline** page is a live local-process control panel. It does
+not connect to Spark or the Gold tables.
+
+From the repository root, start the UI with:
+
+```powershell
+python -m streamlit run advanced/ui/app.py
+```
+
+Before starting a run:
+
+1. Start the Kafka broker configured by `KAFKA_BOOTSTRAP_SERVERS`.
+2. Confirm that `Camera_sample/TEST.mp4` exists and is readable.
+3. Open **Kafka Pipeline**, choose the camera count, FPS, person workers
+   and plate workers, then select **Start pipeline**.
+
+The controller starts detector consumers first, starts a committed-offset
+lag monitor, and starts the camera producer last. It provisions missing
+topics and increases topic partition counts when needed. Kafka partition
+counts cannot be decreased; a later run with fewer workers retains the
+existing partitions.
+
+Each run writes its configuration, metadata, process logs and JSONL
+metrics under `advanced/experiment_results/<run_id>/`. These are local
+experiment artifacts and are intentionally excluded from Git.
+
+The page reports measured application metrics: producer message and byte
+throughput, delivery latency, producer queue depth, per-worker receive and
+processing rates, processing/commit latency, and committed lag by
+partition. It does not report broker host I/O or CPU/RAM/GPU utilization.
+The detector workers use mock simulation with a 30 ms delay; no YOLO
+inference is executed.
+
+The **Overview** and **Person Monitoring** pages now read the same saved
+`pipeline_config.json`, run metadata and JSONL metrics as the Kafka Pipeline
+page. They share the same cached `PipelineController` instance through
+`advanced/ui/pipeline_state.py`.
+
+- **Overview** summarizes the complete run: selected camera/FPS/worker
+  configuration, producer throughput, person and plate processing rates,
+  consumer lag, worker metrics and YOLO11n reference assumptions.
+- **Person Monitoring** focuses on the person topic: person-camera assignments,
+  target input rate, per-worker throughput and latency, person partition lag,
+  and the person-topic throughput history.
+- Both pages retain the persisted Gold employee/observation analytics as
+  separate historical sections. Those Gold sections still require the Spark
+  runtime described above.
+
+The camera count, FPS and worker controls remain centralized on the
+**Kafka Pipeline** page. The Overview and Person Monitoring pages are
+read-only views of the selected/latest saved run configuration; they do not
+start another producer or detector process. The Kafka live views can be used
+without opening a Spark session.
+
+
+Each dashboard run uses run-specific person and plate consumer-group IDs so
+committed offsets from an earlier experiment do not carry into the next run.
+Stop any producer or detector processes started manually before using the
+dashboard, otherwise they can still publish to or consume from the same Kafka
+topics.

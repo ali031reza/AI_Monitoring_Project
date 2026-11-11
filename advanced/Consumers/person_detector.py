@@ -16,6 +16,7 @@ during initialization.
 
 from __future__ import annotations
 
+import argparse
 import csv
 import json
 import time
@@ -31,6 +32,13 @@ from advanced.config import (
     CameraConfig,
     load_cameras,
     load_settings,
+)
+
+from advanced.performance_monitoring.metrics_collector import MetricsCollector
+from advanced.performance_monitoring.pipeline_config import (
+    cameras_from_config,
+    load_pipeline_config,
+    load_run_settings,
 )
 
 from advanced.Consumers.person_simulator import (
@@ -159,6 +167,7 @@ class PersonDetector:
         reference_data: PersonReferenceData | None = None,
         consumer: Any | None = None,
         output_path: str | Path | None = None,
+        metrics_collector: MetricsCollector | None = None,
     ) -> None:
 
         # ----------------------------------------------------
@@ -171,6 +180,7 @@ class PersonDetector:
             )
 
         self.settings = settings
+        self.metrics_collector = metrics_collector
 
         # ----------------------------------------------------
         # Validate camera configurations
@@ -542,27 +552,95 @@ class PersonDetector:
                     )
 
                     if message is None:
+                        if self.metrics_collector is not None:
+                            self.metrics_collector.write_snapshot()
                         continue
 
+                    if self.metrics_collector is not None:
+                        self.metrics_collector.increment_counter(
+                            "messages_received"
+                        )
+                        payload = message.value()
+                        if isinstance(payload, bytes):
+                            self.metrics_collector.increment_counter(
+                                "payload_bytes",
+                                len(payload),
+                            )
+
                     if message.error() is not None:
+                        if self.metrics_collector is not None:
+                            self.metrics_collector.increment_counter(
+                                "messages_failed"
+                            )
                         raise RuntimeError(
                             f"Kafka consumer error: {message.error()}"
                         )
 
-                    # 1. Validate and process the message.
-                    event = self.process_message(message)
+                    try:
+                        # 1. Validate and process the message.
+                        processing_started = time.perf_counter()
+                        event = self.process_message(message)
 
-                    # 2. Persist the event.
-                    writer.writerow(event)
+                        if self.metrics_collector is not None:
+                            self.metrics_collector.observe_latency_ms(
+                                "message_processing",
+                                (
+                                    time.perf_counter() - processing_started
+                                ) * 1000,
+                            )
 
-                    # 3. Ensure the data is flushed.
-                    file.flush()
+                        # 2. Persist the event.
+                        write_started = time.perf_counter()
+                        writer.writerow(event)
 
-                    # 4. Commit the Kafka offset.
-                    self._consumer.commit(
-                        message=message,
-                        asynchronous=False,
-                    )
+                        if self.metrics_collector is not None:
+                            self.metrics_collector.observe_latency_ms(
+                                "csv_write",
+                                (
+                                    time.perf_counter() - write_started
+                                ) * 1000,
+                            )
+
+                        # 3. Ensure the data is flushed.
+                        flush_started = time.perf_counter()
+                        file.flush()
+
+                        if self.metrics_collector is not None:
+                            self.metrics_collector.observe_latency_ms(
+                                "csv_flush",
+                                (
+                                    time.perf_counter() - flush_started
+                                ) * 1000,
+                            )
+                            self.metrics_collector.increment_counter(
+                                "messages_processed"
+                            )
+
+                        # 4. Commit the Kafka offset.
+                        commit_started = time.perf_counter()
+                        self._consumer.commit(
+                            message=message,
+                            asynchronous=False,
+                        )
+
+                        if self.metrics_collector is not None:
+                            self.metrics_collector.observe_latency_ms(
+                                "kafka_commit",
+                                (
+                                    time.perf_counter() - commit_started
+                                ) * 1000,
+                            )
+                            self.metrics_collector.increment_counter(
+                                "messages_committed"
+                            )
+                            self.metrics_collector.write_snapshot()
+
+                    except Exception:
+                        if self.metrics_collector is not None:
+                            self.metrics_collector.increment_counter(
+                                "messages_failed"
+                            )
+                        raise
 
                     logger.info(
                         "Person detection processed | "
@@ -591,9 +669,13 @@ class PersonDetector:
         if self._closed:
             return
 
-        self._consumer.close()
-
         self._closed = True
+
+        try:
+            self._consumer.close()
+        finally:
+            if self.metrics_collector is not None:
+                self.metrics_collector.close()
 
         logger.info(
             "Person detector closed"
@@ -605,7 +687,26 @@ class PersonDetector:
 # ============================================================
 
 def main() -> None:
-    """Initialize dependencies and start the person detector."""
+    """Initialize dependencies and start one person detector worker."""
+
+    parser = argparse.ArgumentParser(
+        description="Run a Kafka person detector worker."
+    )
+    parser.add_argument(
+        "--run-id",
+        default="run_001",
+        help="Experiment run ID for standalone execution.",
+    )
+    parser.add_argument(
+        "--worker-id",
+        default=None,
+        help="Worker identity (worker1, worker2, etc.).",
+    )
+    parser.add_argument(
+        "--config-path",
+        help="Shared pipeline configuration created by the scaling dashboard.",
+    )
+    args = parser.parse_args()
 
     logging.basicConfig(
         level=logging.INFO,
@@ -617,18 +718,42 @@ def main() -> None:
         ),
     )
 
-    # Load application configuration once.
-    settings = load_settings()
+    if args.config_path:
+        pipeline_config = load_pipeline_config(args.config_path)
+        worker_id = args.worker_id or "worker1"
+        settings = load_run_settings(
+            pipeline_config,
+            person_worker_id=worker_id,
+        )
+        cameras = cameras_from_config(pipeline_config)
+        run_id = pipeline_config["run_id"]
+    else:
+        if args.worker_id:
+            import os
 
-    # Load camera configurations once.
-    cameras = load_cameras(
-        settings.paths.cameras_csv
+            environment = dict(os.environ)
+            environment["PERSON_DETECTOR_WORKER_ID"] = args.worker_id
+            settings = load_settings(environ=environment)
+        else:
+            settings = load_settings()
+
+        cameras = load_cameras(settings.paths.cameras_csv)
+        worker_id = settings.person_detector_worker_id
+        run_id = args.run_id
+
+    metrics_collector = MetricsCollector(
+        output_path=(
+            settings.paths.experiment_run_dir(run_id)
+            / f"person_{worker_id}_metrics.jsonl"
+        ),
+        run_id=run_id,
+        component=f"person_{worker_id}",
     )
 
-    # Initialize detector.
     detector = PersonDetector(
         settings=settings,
         cameras=cameras,
+        metrics_collector=metrics_collector,
     )
 
     detector.run_forever()

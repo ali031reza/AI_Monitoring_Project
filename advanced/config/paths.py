@@ -73,6 +73,20 @@ class ProjectPaths:
     def plate_detections_csv(self) -> Path:
         return self.data_dir / "plates_detected.csv"
 
+    def plate_worker_detections_csv(self, worker_id: str) -> Path:
+        """Return the output CSV path for a plate detector worker."""
+
+        if (
+            not isinstance(worker_id, str)
+            or not re.fullmatch(r"worker[1-9]\d*", worker_id)
+        ):
+            raise ValueError(
+                f"Invalid plate detector worker ID: {worker_id!r}. "
+                "Expected worker1, worker2, worker3, etc."
+            )
+
+        return self.data_dir / f"plates_detected_{worker_id}.csv"
+
     @property
     def preview_dir(self) -> Path:
         return self.advanced_dir / "preview"

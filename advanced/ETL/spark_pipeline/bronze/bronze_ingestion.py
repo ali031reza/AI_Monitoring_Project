@@ -42,6 +42,10 @@ class BronzeIngestion:
         r"persons_detected_worker([1-9]\d*)\.csv"
     )
 
+    PLATE_WORKER_PATTERN = re.compile(
+        r"plates_detected_worker([1-9]\d*)\.csv"
+    )
+
     REQUIRED_COLUMNS = {
         "person": (
             "Time_stamp",
@@ -286,6 +290,29 @@ class BronzeIngestion:
 
         return workers
 
+    def _discover_plate_workers(self) -> list[tuple[int, Path]]:
+        """Discover worker-specific plate CSV files in numeric order."""
+
+        if not self.data_dir.is_dir():
+            return []
+
+        candidate_files = list(
+            self.data_dir.glob("plates_detected_worker*.csv")
+        )
+        workers = []
+
+        for file_path in candidate_files:
+            match = self.PLATE_WORKER_PATTERN.fullmatch(file_path.name)
+            if not match:
+                raise ValueError(
+                    f"Invalid plate worker filename: {file_path.name}. "
+                    "Expected plates_detected_worker1.csv, etc."
+                )
+            workers.append((int(match.group(1)), file_path))
+
+        workers.sort(key=lambda item: item[0])
+        return workers
+
     # ========================================================
     # 4. PIPELINE PREFLIGHT
     # ========================================================
@@ -321,11 +348,26 @@ class BronzeIngestion:
 
         # Validate fixed source files.
 
-        fixed_sources = (
-            (
+        plate_worker_files = self._discover_plate_workers()
+
+        if plate_worker_files:
+            for worker_number, file_path in plate_worker_files:
+                self._validate_columns(
+                    file_path,
+                    self.REQUIRED_COLUMNS["plate"],
+                )
+                logger.info(
+                    "Validated plate worker %d: %s",
+                    worker_number,
+                    file_path.name,
+                )
+        else:
+            self._validate_columns(
                 self.settings.paths.plate_detections_csv,
                 self.REQUIRED_COLUMNS["plate"],
-            ),
+            )
+
+        fixed_sources = (
             (
                 self.settings.paths.employees_csv,
                 self.REQUIRED_COLUMNS["employees"],
@@ -537,18 +579,35 @@ class BronzeIngestion:
     # ========================================================
 
     def ingest_plate_detections(self) -> None:
-        """
-        Ingest plate detection records.
-        """
+        """Ingest and combine all plate detector worker records."""
 
-        file_path = Path(
-            self.settings.paths.plate_detections_csv
-        )
+        worker_files = self._discover_plate_workers()
 
-        dataframe = self._read_csv(
-            file_path,
-            self.REQUIRED_COLUMNS["plate"],
-        )
+        if worker_files:
+            dataframes = [
+                self._read_csv(
+                    file_path,
+                    self.REQUIRED_COLUMNS["plate"],
+                )
+                for _, file_path in worker_files
+            ]
+
+            dataframe = dataframes[0]
+            for worker_dataframe in dataframes[1:]:
+                dataframe = dataframe.unionByName(worker_dataframe)
+
+            logger.info(
+                "Combining %d plate worker CSV files.",
+                len(worker_files),
+            )
+        else:
+            file_path = Path(
+                self.settings.paths.plate_detections_csv
+            )
+            dataframe = self._read_csv(
+                file_path,
+                self.REQUIRED_COLUMNS["plate"],
+            )
 
         self._write_table(
             dataframe=dataframe,
