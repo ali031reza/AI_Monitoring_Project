@@ -196,8 +196,8 @@ class PipelineController:
                 raise ValueError("fps_per_camera must be between 1 and 20")
 
             for name, value, maximum in (
-                ("person_workers", person_workers, 8),
-                ("plate_workers", plate_workers, 4),
+                ("person_workers", person_workers, 20),
+                ("plate_workers", plate_workers, 20),
             ):
                 if (
                     isinstance(value, bool)
@@ -248,11 +248,6 @@ class PipelineController:
                 camera.detector_type == "plate"
                 for camera in cameras
             )
-            if person_workers > person_camera_count:
-                raise ValueError("Person workers cannot exceed person camera count")
-            if plate_workers > plate_camera_count:
-                raise ValueError("Plate workers cannot exceed plate camera count")
-
             run_id = datetime.now(timezone.utc).strftime(
                 "run_%Y%m%d_%H%M%S_%f"
             )
