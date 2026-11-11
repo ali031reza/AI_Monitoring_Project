@@ -35,6 +35,11 @@ from advanced.config import (
 )
 
 from advanced.performance_monitoring.metrics_collector import MetricsCollector
+from advanced.performance_monitoring.pipeline_config import (
+    cameras_from_config,
+    load_pipeline_config,
+    load_run_settings,
+)
 
 from advanced.Consumers.person_simulator import (
     PersonReferenceData,
@@ -682,15 +687,24 @@ class PersonDetector:
 # ============================================================
 
 def main() -> None:
-    """Initialize dependencies and start the person detector."""
+    """Initialize dependencies and start one person detector worker."""
 
     parser = argparse.ArgumentParser(
-        description="Run the Kafka person detector."
+        description="Run a Kafka person detector worker."
     )
     parser.add_argument(
         "--run-id",
         default="run_001",
-        help="Experiment run ID (default: run_001).",
+        help="Experiment run ID for standalone execution.",
+    )
+    parser.add_argument(
+        "--worker-id",
+        default=None,
+        help="Worker identity (worker1, worker2, etc.).",
+    )
+    parser.add_argument(
+        "--config-path",
+        help="Shared pipeline configuration created by the scaling dashboard.",
     )
     args = parser.parse_args()
 
@@ -704,26 +718,38 @@ def main() -> None:
         ),
     )
 
-    # Load application configuration once.
-    settings = load_settings()
+    if args.config_path:
+        pipeline_config = load_pipeline_config(args.config_path)
+        worker_id = args.worker_id or "worker1"
+        settings = load_run_settings(
+            pipeline_config,
+            person_worker_id=worker_id,
+        )
+        cameras = cameras_from_config(pipeline_config)
+        run_id = pipeline_config["run_id"]
+    else:
+        if args.worker_id:
+            import os
 
-    # Load camera configurations once.
-    cameras = load_cameras(
-        settings.paths.cameras_csv
-    )
+            environment = dict(os.environ)
+            environment["PERSON_DETECTOR_WORKER_ID"] = args.worker_id
+            settings = load_settings(environ=environment)
+        else:
+            settings = load_settings()
 
-    # Create worker-specific metrics output.
-    worker_id = settings.person_detector_worker_id
+        cameras = load_cameras(settings.paths.cameras_csv)
+        worker_id = settings.person_detector_worker_id
+        run_id = args.run_id
+
     metrics_collector = MetricsCollector(
         output_path=(
-            settings.paths.experiment_run_dir(args.run_id)
+            settings.paths.experiment_run_dir(run_id)
             / f"person_{worker_id}_metrics.jsonl"
         ),
-        run_id=args.run_id,
+        run_id=run_id,
         component=f"person_{worker_id}",
     )
 
-    # Initialize detector.
     detector = PersonDetector(
         settings=settings,
         cameras=cameras,
