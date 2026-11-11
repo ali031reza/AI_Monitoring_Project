@@ -10,6 +10,9 @@ import streamlit as st
 
 from advanced.config import ProjectPaths, load_cameras
 from advanced.performance_monitoring.pipeline_controller import PipelineController
+from advanced.performance_monitoring.run_metadata import (
+    build_yolo_reference_estimate,
+)
 
 
 # ============================================================
@@ -364,64 +367,64 @@ def render_live_metrics(run_directory: Path, process_controller: PipelineControl
 
     frames_col, producer_col, person_col, plate_col, lag_col = st.columns(5)
     frames_col.metric(
-        "Frames generated",
-        f"{_number(rates['producer_frames'])} frames/s",
+        "Frames generated · frames/s",
+        _number(rates["producer_frames"]),
     )
     producer_col.metric(
-        "Producer delivered",
-        f"{_number(rates['producer_delivered'])} msg/s",
+        "Producer delivered · msg/s",
+        _number(rates["producer_delivered"]),
     )
     person_col.metric(
-        "Person processed",
-        f"{_number(rates['person_processed'])} msg/s",
+        "Person processed · msg/s",
+        _number(rates["person_processed"]),
     )
     plate_col.metric(
-        "Plate processed",
-        f"{_number(rates['plate_processed'])} msg/s",
+        "Plate processed · msg/s",
+        _number(rates["plate_processed"]),
     )
     lag_col.metric(
-        "Committed consumer lag",
-        "—" if total_lag is None else f"{total_lag:,} messages",
+        "Committed consumer lag · messages",
+        "—" if total_lag is None else f"{total_lag:,}",
     )
 
     person_in_col, plate_in_col, bytes_col, mean_size_col, queue_col = st.columns(5)
     person_in_col.metric(
-        "Person topic delivered",
-        f"{_number(rates['producer_person_delivered'])} msg/s",
+        "Person topic delivered · msg/s",
+        _number(rates["producer_person_delivered"]),
     )
     plate_in_col.metric(
-        "Plate topic delivered",
-        f"{_number(rates['producer_plate_delivered'])} msg/s",
+        "Plate topic delivered · msg/s",
+        _number(rates["producer_plate_delivered"]),
     )
     bytes_col.metric(
-        "Payload queued",
-        f"{_number((rates['producer_bytes'] or 0) / (1024 * 1024))} MB/s",
+        "Payload queued · MB/s",
+        _number((rates["producer_bytes"] or 0) / (1024 * 1024)),
     )
     mean_size_col.metric(
-        "Mean JPEG payload",
-        f"{_number(rates['producer_mean_payload_bytes'], 0)} bytes",
+        "Mean JPEG payload · bytes",
+        _number(rates["producer_mean_payload_bytes"], 0),
     )
     queue_col.metric(
-        "Producer queue depth",
+        "Producer queue depth · messages",
         "—" if rates["producer_queue"] is None else f"{int(rates['producer_queue']):,}",
     )
 
     frame_col, delivery_col, person_latency_col, plate_latency_col = st.columns(4)
     frame_col.metric(
-        "Frame read/encode p95",
-        f"{_number(rates['producer_frame_read_p95'])} ms",
+        "Frame read/encode p95 · ms",
+        _number(rates["producer_frame_read_p95"]),
     )
     delivery_col.metric(
-        "Delivery p95",
-        f"{_number(rates['producer_delivery_p95'])} ms",
+        "Delivery p95 · ms",
+        _number(rates["producer_delivery_p95"]),
     )
     person_latency_col.metric(
-        "Worst person worker p95",
-        f"{_number(rates['person_processing_p95'])} ms",
+        "Worst person worker p95 · ms",
+        _number(rates["person_processing_p95"]),
     )
     plate_latency_col.metric(
-        "Worst plate worker p95",
-        f"{_number(rates['plate_processing_p95'])} ms",
+        "Worst plate worker p95 · ms",
+        _number(rates["plate_processing_p95"]),
     )
 
     st.markdown("#### Throughput over time")
@@ -532,8 +535,8 @@ with st.container(border=True):
         person_workers = st.slider(
             "Person detector workers",
             min_value=1,
-            max_value=min(8, person_camera_count),
-            value=min(2, person_camera_count),
+            max_value=20,
+            value=2,
             step=1,
             disabled=controller.is_running,
         )
@@ -542,7 +545,7 @@ with st.container(border=True):
         plate_workers = st.slider(
             "Plate detector workers",
             min_value=1,
-            max_value=min(4, plate_camera_count),
+            max_value=20,
             value=1,
             step=1,
             disabled=controller.is_running,
@@ -557,6 +560,63 @@ with st.container(border=True):
         f"({target_person:,} person-topic + {target_plate:,} plate-topic). "
         f"Camera mix: {person_camera_count} person / {plate_camera_count} plate. "
         "Detector processing delay: 30 ms per message."
+    )
+
+    if person_workers > person_camera_count or plate_workers > plate_camera_count:
+        idle_types = []
+        if person_workers > person_camera_count:
+            idle_types.append(
+                f"{person_workers - person_camera_count} person worker(s)"
+            )
+        if plate_workers > plate_camera_count:
+            idle_types.append(
+                f"{plate_workers - plate_camera_count} plate worker(s)"
+            )
+        st.warning(
+            "The selected configuration starts all workers, but "
+            + " and ".join(idle_types)
+            + " may remain idle because there are fewer cameras assigned "
+            "to that detector type than workers."
+        )
+
+    yolo_reference = build_yolo_reference_estimate(
+        person_workers,
+        plate_workers,
+    )
+    yolo_memory = yolo_reference["model_weight_memory_estimate_mb"]
+
+    st.markdown("#### YOLO11n reference resources (not executed)")
+    cpu_ref_col, gpu_ref_col, ram_ref_col, vram_ref_col = st.columns(4)
+    cpu_ref_col.metric(
+        "CPU ONNX latency · ms/image",
+        _number(
+            yolo_reference["cpu_benchmark"]["latency_ms_per_image"]
+        ),
+    )
+    gpu_ref_col.metric(
+        "T4 TensorRT10 latency · ms/image",
+        _number(
+            yolo_reference["gpu_benchmark"]["latency_ms_per_image"]
+        ),
+    )
+    ram_ref_col.metric(
+        "Model weights in RAM · MB (FP32)",
+        _number(yolo_memory["fp32_all_workers"]),
+    )
+    vram_ref_col.metric(
+        "Model weights in VRAM · MB (FP16)",
+        _number(yolo_memory["fp16_all_workers"]),
+    )
+    st.caption(
+        f"Assumes one YOLO11n 640×640, batch-1 instance per worker "
+        f"({person_workers} person + {plate_workers} plate = "
+        f"{person_workers + plate_workers} total). Weight-only estimates: "
+        "10.4 MB FP32 and 5.2 MB FP16 per instance. Full runtime RAM/VRAM, "
+        "CPU utilization and GPU utilization are not inferred from these "
+        "benchmarks and are not measured by the mock detectors."
+    )
+    st.markdown(
+        "[Benchmark source: Ultralytics YOLO11](https://docs.ultralytics.com/models/yolo11/)"
     )
 
     button_col1, button_col2 = st.columns(2)
