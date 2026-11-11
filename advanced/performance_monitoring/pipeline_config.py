@@ -38,8 +38,8 @@ def build_scaled_cameras(
         if isinstance(value, bool) or not isinstance(value, int) or value < 1:
             raise ValueError(f"{name} must be a positive integer")
 
-    if not 2 <= camera_count <= 40:
-        raise ValueError("camera_count must be between 2 and 40")
+    if not 5 <= camera_count <= 40:
+        raise ValueError("camera_count must be between 5 and 40")
 
     enabled = tuple(camera for camera in base_cameras if camera.enabled)
     person_templates = tuple(
@@ -62,7 +62,27 @@ def build_scaled_cameras(
 
     person_ratio = len(person_templates) / len(enabled)
     person_count = int(camera_count * person_ratio + 0.5)
-    person_count = max(1, min(camera_count - 1, person_count))
+    person_count = max(4, min(camera_count - 1, person_count))
+
+    # The person simulator requires at least one camera in each zone A-D.
+    zone_templates = [
+        next(
+            camera
+            for camera in person_templates
+            if camera.zone_id == zone
+        )
+        for zone in ("A", "B", "C", "D")
+    ]
+    representative_ids = {
+        camera.camera_id
+        for camera in zone_templates
+    }
+    remaining_templates = [
+        camera
+        for camera in person_templates
+        if camera.camera_id not in representative_ids
+    ]
+    person_templates = tuple(zone_templates + remaining_templates)
 
     templates = {
         "person": person_templates,
