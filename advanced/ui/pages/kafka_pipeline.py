@@ -109,6 +109,16 @@ def _throughput_history(run_dir: Path) -> pd.DataFrame:
         "messages_delivered",
         "Producer delivered",
     )
+    add_record(
+        run_dir / "producer_metrics.jsonl",
+        "messages_delivered_person",
+        "Person produced",
+    )
+    add_record(
+        run_dir / "producer_metrics.jsonl",
+        "messages_delivered_plate",
+        "Plate produced",
+    )
 
     for path in _worker_metric_paths(run_dir, "person"):
         add_record(path, "messages_processed", "Person processed")
@@ -126,6 +136,8 @@ def _throughput_history(run_dir: Path) -> pd.DataFrame:
     for column in (
         "Frames generated",
         "Producer delivered",
+        "Person produced",
+        "Plate produced",
         "Person processed",
         "Plate processed",
     ):
@@ -135,6 +147,8 @@ def _throughput_history(run_dir: Path) -> pd.DataFrame:
     return dataframe[[
         "Frames generated",
         "Producer delivered",
+        "Person produced",
+        "Plate produced",
         "Person processed",
         "Plate processed",
     ]]
@@ -310,6 +324,8 @@ def _latest_rates(run_dir: Path) -> dict:
     return {
         "producer_frames": producer_rates.get("frames_generated"),
         "producer_delivered": producer_rates.get("messages_delivered"),
+        "producer_person_delivered": producer_rates.get("messages_delivered_person"),
+        "producer_plate_delivered": producer_rates.get("messages_delivered_plate"),
         "producer_bytes": producer_rates.get("payload_bytes"),
         "producer_queue": producer.get("gauges", {}).get("producer_queue_depth"),
         "producer_delivery_p95": (
@@ -353,7 +369,15 @@ def render_live_metrics(run_directory: Path, process_controller: PipelineControl
         "—" if total_lag is None else f"{total_lag:,} messages",
     )
 
-    bytes_col, queue_col, delivery_col, person_latency_col, plate_latency_col = st.columns(5)
+    person_in_col, plate_in_col, bytes_col, queue_col = st.columns(4)
+    person_in_col.metric(
+        "Person topic delivered",
+        f"{_number(rates['producer_person_delivered'])} msg/s",
+    )
+    plate_in_col.metric(
+        "Plate topic delivered",
+        f"{_number(rates['producer_plate_delivered'])} msg/s",
+    )
     bytes_col.metric(
         "Payload queued",
         f"{_number((rates['producer_bytes'] or 0) / (1024 * 1024))} MB/s",
@@ -362,6 +386,8 @@ def render_live_metrics(run_directory: Path, process_controller: PipelineControl
         "Producer queue depth",
         "—" if rates["producer_queue"] is None else f"{int(rates['producer_queue']):,}",
     )
+
+    delivery_col, person_latency_col, plate_latency_col = st.columns(3)
     delivery_col.metric(
         "Delivery p95",
         f"{_number(rates['producer_delivery_p95'])} ms",
