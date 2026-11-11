@@ -252,13 +252,21 @@ def load_run_settings(
     """Load application settings using the run's FPS and worker identity."""
 
     environment = dict(os.environ)
+    run_id = config["run_id"]
     environment["FRAME_INTERVAL_SECONDS"] = str(
         1.0 / float(config["fps_per_camera"])
     )
+    # Isolate consumer offsets between experiment runs.
+    environment["PERSON_DETECTOR_GROUP_ID"] = (
+        f"person-detectors-{run_id}"
+    )
+    environment["PLATE_DETECTOR_GROUP_ID"] = (
+        f"plate-detectors-{run_id}"
+    )
 
-    if person_worker_id is not None:
-        if not WORKER_ID_PATTERN.fullmatch(person_worker_id):
-            raise ValueError(f"Invalid person worker ID: {person_worker_id!r}")
-        environment["PERSON_DETECTOR_WORKER_ID"] = person_worker_id
+    worker_id = person_worker_id or "worker1"
+    if not WORKER_ID_PATTERN.fullmatch(worker_id):
+        raise ValueError(f"Invalid person worker ID: {worker_id!r}")
+    environment["PERSON_DETECTOR_WORKER_ID"] = worker_id
 
     return load_settings(environ=environment)
