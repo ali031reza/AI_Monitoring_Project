@@ -394,13 +394,9 @@ def _collect_worker_metadata(
     }
 
 
-# ============================================================
-# 8. YOLO REFERENCE METADATA
-# ============================================================
-
 # ========================================================
-# 9. BUILD RUN METADATA
-# ============================================================
+# 8. BUILD RUN METADATA
+# ========================================================
 
 def build_run_metadata(
     settings: ApplicationSettings,
@@ -497,7 +493,7 @@ def build_run_metadata(
                 "current mock detector implementation."
             ),
             "inference_metrics": (
-                "The detector workers simulate processing; no YOLO model "
+                "The detector workers use mock simulation; no model inference "
                 "is executed."
             ),
         },
@@ -505,7 +501,7 @@ def build_run_metadata(
 
 
 # ============================================================
-# 10. SAVE RUN METADATA
+# 9. SAVE RUN METADATA
 # ============================================================
 
 def write_run_metadata(
@@ -572,7 +568,7 @@ def write_run_metadata(
 
 
 # ============================================================
-# 11. COMMAND-LINE ENTRY POINT
+# 10. COMMAND-LINE ENTRY POINT
 # ============================================================
 
 def main() -> None:
