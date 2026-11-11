@@ -1,1 +1,139 @@
-﻿{}
+{
+    "experiment": {
+        "run_id": "run_001",
+        "created_at_utc": "2026-11-11T05:54:08.188757+00:00",
+        "git": {
+            "commit": "ed41378f918560f2d8808320a0a277a525881936",
+            "branch": "keep-history",
+            "working_tree_clean": false
+        }
+    },
+    "runtime": {
+        "python_version": "3.11.9"
+    },
+    "camera": {
+        "configured_camera_count": 10,
+        "enabled_camera_count": 10,
+        "disabled_camera_count": 0,
+        "enabled_camera_ids": [
+            "001",
+            "002",
+            "003",
+            "004",
+            "005",
+            "006",
+            "007",
+            "008",
+            "009",
+            "010"
+        ],
+        "disabled_camera_ids": [],
+        "camera_counts_by_detector": {
+            "person": 7,
+            "plate": 3
+        },
+        "sampling": {
+            "frame_interval_seconds": 0.08333333333333333,
+            "target_fps_per_camera": 12.0,
+            "nominal_input_fps_by_detector": {
+                "person": 84.0,
+                "plate": 36.0
+            }
+        },
+        "resolution": {
+            "width": 640,
+            "height": 360
+        },
+        "jpeg_quality": 80,
+        "camera_partition_assignments": {
+            "person": {
+                "0": [
+                    "001",
+                    "002",
+                    "003"
+                ],
+                "1": [
+                    "004",
+                    "005",
+                    "006",
+                    "007"
+                ]
+            },
+            "plate": {
+                "0": [
+                    "008",
+                    "009",
+                    "010"
+                ]
+            }
+        }
+    },
+    "video_source": {
+        "source_type": "recorded_video",
+        "video_path": "D:\\projects\\AI_Monitoring_Project\\Camera_sample\\TEST.mp4",
+        "exists": true,
+        "file_size_bytes": 14865492
+    },
+    "kafka": {
+        "bootstrap_servers": "127.0.0.1:9092",
+        "topics": {
+            "person": "camera.person.frames.dev",
+            "plate": "camera.plate.frames.dev"
+        },
+        "consumer_groups": {
+            "person": "person-detectors-dev",
+            "plate": "plate-detectors-dev"
+        }
+    },
+    "detector_workers": {
+        "workers": {
+            "person": {
+                "worker_count": 2,
+                "processing_delay_seconds": 0.03,
+                "processing_delay_ms": 30.0
+            },
+            "plate": {
+                "worker_count": 1,
+                "processing_delay_seconds": 0.03,
+                "processing_delay_ms": 30.0
+            }
+        },
+        "total_worker_count": 3,
+        "configuration_source": "Experiment launcher arguments; worker counts are declared, not discovered automatically."
+    },
+    "yolo_reference": {
+        "model": "YOLO11n",
+        "parameters_millions": 2.6,
+        "flops_billions": 6.5,
+        "input_resolution": {
+            "width": 640,
+            "height": 640
+        },
+        "batch_size": 1,
+        "cpu_benchmark": {
+            "device": "CPU",
+            "backend": "ONNX",
+            "latency_ms_per_image": 56.1
+        },
+        "gpu_benchmark": {
+            "device": "NVIDIA T4",
+            "backend": "TensorRT 10",
+            "latency_ms_per_image": 1.5
+        },
+        "weight_memory_estimate_mb": {
+            "fp32_per_instance": 10.4,
+            "fp32_all_instances": 31.200000000000003,
+            "fp16_per_instance": 5.2,
+            "fp16_all_instances": 15.600000000000001
+        },
+        "source_url": "https://docs.ultralytics.com/models/yolo11/",
+        "note": "Reference benchmark assumptions only. YOLO inference is not executed by this project.",
+        "assumed_model_instances": 3,
+        "memory_scope": "Model weights only. Excludes runtime, activation buffers and framework overhead."
+    },
+    "measurement_policy": {
+        "kafka_and_application_metrics": "Collected from actual application execution.",
+        "yolo_resource_metrics": "Reference benchmark estimates, not measured.",
+        "full_ram_and_vram": "Not estimated or reported as measured."
+    }
+}

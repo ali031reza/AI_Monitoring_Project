@@ -110,3 +110,29 @@ class ProjectPaths:
     def camera_sample_video(self) -> Path:
         return self.camera_sample_dir / "TEST.mp4"
 
+
+    # ========================================================
+    # EXPERIMENT RESULTS
+    # ========================================================
+
+    @property
+    def experiment_results_dir(self) -> Path:
+        """Return the root directory for experiment results."""
+
+        return self.advanced_dir / "experiment_results"
+
+    def experiment_run_dir(self, run_id: str) -> Path:
+        """Return the output directory for a specific experiment."""
+
+        if (
+            not isinstance(run_id, str)
+            or not re.fullmatch(
+                r"run_[A-Za-z0-9][A-Za-z0-9_-]*",
+                run_id,
+            )
+        ):
+            raise ValueError(
+                f"Invalid experiment run ID: {run_id!r}"
+            )
+
+        return self.experiment_results_dir / run_id

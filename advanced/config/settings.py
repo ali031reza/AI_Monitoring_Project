@@ -708,7 +708,7 @@ def load_settings(
         frame_interval_seconds=_read_float(
             source,
             "FRAME_INTERVAL_SECONDS",
-            1.0,
+            1/12,
         ),
 
         frame_width=_read_integer(
