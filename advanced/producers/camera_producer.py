@@ -17,6 +17,7 @@ at initialization rather than loaded inside the streaming loop.
 
 from __future__ import annotations
 
+import argparse
 import logging
 import time
 
@@ -34,6 +35,7 @@ from advanced.config import (
 )
 
 from advanced.producers.video_frame_source import VideoFrameSource
+from advanced.performance_monitoring.metrics_collector import MetricsCollector
 
 
 # ============================================================
@@ -85,6 +87,7 @@ class CameraProducer:
         cameras: Iterable[CameraConfig],
         *,
         producer: Producer | None = None,
+        metrics_collector: MetricsCollector | None = None,
     ) -> None:
 
         # ----------------------------------------------------
@@ -150,6 +153,7 @@ class CameraProducer:
             )
 
         self.settings = settings
+        self.metrics_collector = metrics_collector
 
         # ----------------------------------------------------
         # Kafka topic mapping
@@ -250,11 +254,26 @@ class CameraProducer:
         associated with its Kafka message.
         """
 
+        queued_at = time.perf_counter()
+
         def on_delivery(error, message):
+
+            delivery_ms = (
+                time.perf_counter() - queued_at
+            ) * 1000
 
             if error is not None:
 
                 self._failed_count += 1
+
+                if self.metrics_collector is not None:
+                    self.metrics_collector.increment_counter(
+                        "messages_failed"
+                    )
+                    self.metrics_collector.observe_latency_ms(
+                        "producer_delivery",
+                        delivery_ms,
+                    )
 
                 logger.error(
                     "Kafka delivery failed | Camera: %s | "
@@ -267,6 +286,15 @@ class CameraProducer:
                 return
 
             self._delivered_count += 1
+
+            if self.metrics_collector is not None:
+                self.metrics_collector.increment_counter(
+                    "messages_delivered"
+                )
+                self.metrics_collector.observe_latency_ms(
+                    "producer_delivery",
+                    delivery_ms,
+                )
 
             logger.debug(
                 "Kafka delivery successful | Camera: %s | "
@@ -338,6 +366,23 @@ class CameraProducer:
 
                 self._queued_count += 1
 
+                if self.metrics_collector is not None:
+                    self.metrics_collector.increment_counter(
+                        "messages_queued"
+                    )
+                    self.metrics_collector.increment_counter(
+                        "payload_bytes",
+                        len(jpeg_bytes),
+                    )
+                    try:
+                        self.metrics_collector.set_gauge(
+                            "producer_queue_depth",
+                            len(self._producer),
+                        )
+                    except (AttributeError, TypeError):
+                        # Some injected test producers do not expose queue length.
+                        pass
+
                 return
 
             except BufferError:
@@ -406,7 +451,19 @@ class CameraProducer:
                 camera.camera_id
             ]
 
+            frame_started = time.perf_counter()
             jpeg_bytes = video_source.read_jpeg()
+
+            if self.metrics_collector is not None:
+                self.metrics_collector.increment_counter(
+                    "frames_generated"
+                )
+                self.metrics_collector.observe_latency_ms(
+                    "frame_read_encode",
+                    (
+                        time.perf_counter() - frame_started
+                    ) * 1000,
+                )
 
             # Queue the frame.
             self._enqueue_message(
@@ -540,6 +597,16 @@ class CameraProducer:
                 # Service any available delivery callbacks.
                 self._producer.poll(0)
 
+                if self.metrics_collector is not None:
+                    try:
+                        self.metrics_collector.set_gauge(
+                            "producer_queue_depth",
+                            len(self._producer),
+                        )
+                    except (AttributeError, TypeError):
+                        pass
+                    self.metrics_collector.write_snapshot()
+
                 elapsed = (
                     time.monotonic() - round_started
                 )
@@ -580,7 +647,11 @@ class CameraProducer:
 
             finally:
 
-                self.release_video_sources()
+                try:
+                    self.release_video_sources()
+                finally:
+                    if self.metrics_collector is not None:
+                        self.metrics_collector.close()
 
 
 # ============================================================
@@ -591,6 +662,16 @@ def main() -> None:
     """
     Initialize the application dependencies once and start streaming.
     """
+
+    parser = argparse.ArgumentParser(
+        description="Run the Kafka camera producer."
+    )
+    parser.add_argument(
+        "--run-id",
+        default="run_001",
+        help="Experiment run ID (default: run_001).",
+    )
+    args = parser.parse_args()
 
     logging.basicConfig(
         level=logging.INFO,
@@ -610,10 +691,21 @@ def main() -> None:
         settings.paths.cameras_csv
     )
 
+    # Create run-scoped producer metrics.
+    metrics_collector = MetricsCollector(
+        output_path=(
+            settings.paths.experiment_run_dir(args.run_id)
+            / "producer_metrics.jsonl"
+        ),
+        run_id=args.run_id,
+        component="producer",
+    )
+
     # Inject dependencies into the producer.
     camera_producer = CameraProducer(
         settings=settings,
         cameras=cameras,
+        metrics_collector=metrics_collector,
     )
 
     camera_producer.run_forever()
