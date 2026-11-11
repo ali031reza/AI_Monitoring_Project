@@ -14,6 +14,7 @@ reference data are injected during initialization.
 
 from __future__ import annotations
 
+import argparse
 import csv
 import json
 import logging
@@ -32,6 +33,8 @@ from advanced.config import (
     load_cameras,
     load_settings,
 )
+
+from advanced.performance_monitoring.metrics_collector import MetricsCollector
 
 from advanced.Consumers.plate_simulator import (
     PlateSimulator,
@@ -160,6 +163,7 @@ class PlateDetector:
         reference_data: VehicleReferenceData | None = None,
         consumer: Any | None = None,
         output_path: str | Path | None = None,
+        metrics_collector: MetricsCollector | None = None,
     ) -> None:
 
         # ----------------------------------------------------
@@ -172,6 +176,7 @@ class PlateDetector:
             )
 
         self.settings = settings
+        self.metrics_collector = metrics_collector
 
         # ----------------------------------------------------
         # Validate camera configurations
@@ -601,22 +606,86 @@ class PlateDetector:
                     )
 
                     if message is None:
+                        if self.metrics_collector is not None:
+                            self.metrics_collector.write_snapshot()
                         continue
 
-                    # 1. Validate and process the message.
-                    event = self.process_message(message)
+                    if self.metrics_collector is not None:
+                        self.metrics_collector.increment_counter(
+                            "messages_received"
+                        )
+                        payload = message.value()
+                        if isinstance(payload, bytes):
+                            self.metrics_collector.increment_counter(
+                                "payload_bytes",
+                                len(payload),
+                            )
 
-                    # 2. Persist the event.
-                    writer.writerow(event)
+                    try:
+                        # 1. Validate and process the message.
+                        processing_started = time.perf_counter()
+                        event = self.process_message(message)
 
-                    # 3. Flush data to the output file.
-                    file.flush()
+                        if self.metrics_collector is not None:
+                            self.metrics_collector.observe_latency_ms(
+                                "message_processing",
+                                (
+                                    time.perf_counter() - processing_started
+                                ) * 1000,
+                            )
 
-                    # 4. Commit the corresponding Kafka offset.
-                    self._consumer.commit(
-                        message=message,
-                        asynchronous=False,
-                    )
+                        # 2. Persist the event.
+                        write_started = time.perf_counter()
+                        writer.writerow(event)
+
+                        if self.metrics_collector is not None:
+                            self.metrics_collector.observe_latency_ms(
+                                "csv_write",
+                                (
+                                    time.perf_counter() - write_started
+                                ) * 1000,
+                            )
+
+                        # 3. Flush data to the output file.
+                        flush_started = time.perf_counter()
+                        file.flush()
+
+                        if self.metrics_collector is not None:
+                            self.metrics_collector.observe_latency_ms(
+                                "csv_flush",
+                                (
+                                    time.perf_counter() - flush_started
+                                ) * 1000,
+                            )
+                            self.metrics_collector.increment_counter(
+                                "messages_processed"
+                            )
+
+                        # 4. Commit the corresponding Kafka offset.
+                        commit_started = time.perf_counter()
+                        self._consumer.commit(
+                            message=message,
+                            asynchronous=False,
+                        )
+
+                        if self.metrics_collector is not None:
+                            self.metrics_collector.observe_latency_ms(
+                                "kafka_commit",
+                                (
+                                    time.perf_counter() - commit_started
+                                ) * 1000,
+                            )
+                            self.metrics_collector.increment_counter(
+                                "messages_committed"
+                            )
+                            self.metrics_collector.write_snapshot()
+
+                    except Exception:
+                        if self.metrics_collector is not None:
+                            self.metrics_collector.increment_counter(
+                                "messages_failed"
+                            )
+                        raise
 
                     logger.info(
                         "Plate detection processed | "
@@ -647,7 +716,11 @@ class PlateDetector:
 
         self._closed = True
 
-        self._consumer.close()
+        try:
+            self._consumer.close()
+        finally:
+            if self.metrics_collector is not None:
+                self.metrics_collector.close()
 
         logger.info(
             "Plate detector closed"
@@ -660,6 +733,16 @@ class PlateDetector:
 
 def main() -> None:
     """Initialize dependencies and start the plate detector."""
+
+    parser = argparse.ArgumentParser(
+        description="Run the Kafka plate detector."
+    )
+    parser.add_argument(
+        "--run-id",
+        default="run_001",
+        help="Experiment run ID (default: run_001).",
+    )
+    args = parser.parse_args()
 
     logging.basicConfig(
         level=logging.INFO,
@@ -684,11 +767,22 @@ def main() -> None:
         settings.paths.employees_csv
     )
 
+    # Create run-scoped plate worker metrics.
+    metrics_collector = MetricsCollector(
+        output_path=(
+            settings.paths.experiment_run_dir(args.run_id)
+            / "plate_worker_metrics.jsonl"
+        ),
+        run_id=args.run_id,
+        component="plate_worker",
+    )
+
     # Inject dependencies into the consumer.
     detector = PlateDetector(
         settings=settings,
         cameras=cameras,
         reference_data=reference_data,
+        metrics_collector=metrics_collector,
     )
 
     detector.run_forever()
