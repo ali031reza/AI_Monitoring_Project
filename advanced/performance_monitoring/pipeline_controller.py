@@ -179,6 +179,30 @@ class PipelineController:
             if self.is_running:
                 raise RuntimeError("A Kafka pipeline run is already active")
 
+            if (
+                isinstance(camera_count, bool)
+                or not isinstance(camera_count, int)
+                or not 5 <= camera_count <= 40
+            ):
+                raise ValueError("camera_count must be between 5 and 40")
+
+            if (
+                isinstance(fps_per_camera, bool)
+                or not isinstance(fps_per_camera, (int, float))
+                or fps_per_camera <= 0
+            ):
+                raise ValueError("fps_per_camera must be positive")
+
+            for name, value in (
+                ("person_workers", person_workers),
+                ("plate_workers", plate_workers),
+            ):
+                if isinstance(value, bool) or not isinstance(value, int) or value < 1:
+                    raise ValueError(f"{name} must be a positive integer")
+
+            self._processes.clear()
+            self._log_handles.clear()
+
             environment = dict(os.environ)
             environment["FRAME_INTERVAL_SECONDS"] = str(
                 1.0 / float(fps_per_camera)
@@ -199,6 +223,19 @@ class PipelineController:
                 plate_partitions=actual_partitions["plate"],
             )
 
+            person_camera_count = sum(
+                camera.detector_type == "person"
+                for camera in cameras
+            )
+            plate_camera_count = sum(
+                camera.detector_type == "plate"
+                for camera in cameras
+            )
+            if person_workers > person_camera_count:
+                raise ValueError("Person workers cannot exceed person camera count")
+            if plate_workers > plate_camera_count:
+                raise ValueError("Plate workers cannot exceed plate camera count")
+
             run_id = datetime.now(timezone.utc).strftime(
                 "run_%Y%m%d_%H%M%S_%f"
             )
@@ -218,6 +255,8 @@ class PipelineController:
                 config,
                 run_dir / "pipeline_config.json",
             )
+
+            self._active_run_id = run_id
 
             write_run_metadata(
                 settings=settings,
@@ -334,6 +373,10 @@ class PipelineController:
 
             for name in ordered_names:
                 self._interrupt_process(self._processes[name])
+                if name == "producer":
+                    # Give consumers a short window to commit the final
+                    # records already accepted by Kafka.
+                    time.sleep(2.0)
 
             for handle in self._log_handles.values():
                 try:
