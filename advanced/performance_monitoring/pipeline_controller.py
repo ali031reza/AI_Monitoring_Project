@@ -200,8 +200,13 @@ class PipelineController:
                 if isinstance(value, bool) or not isinstance(value, int) or value < 1:
                     raise ValueError(f"{name} must be a positive integer")
 
-            self._processes.clear()
+            for handle in self._log_handles.values():
+                try:
+                    handle.close()
+                except Exception:
+                    pass
             self._log_handles.clear()
+            self._processes.clear()
 
             environment = dict(os.environ)
             environment["FRAME_INTERVAL_SECONDS"] = str(
