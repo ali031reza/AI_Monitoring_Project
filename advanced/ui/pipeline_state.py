@@ -8,6 +8,7 @@ from pathlib import Path
 import pandas as pd
 import streamlit as st
 
+from advanced.config import ProjectPaths
 from advanced.performance_monitoring.pipeline_controller import PipelineController
 
 
@@ -25,6 +26,35 @@ def get_pipeline_controller() -> PipelineController:
 # ============================================================
 # 2. RUN FILE READERS
 # ============================================================
+
+def get_latest_run_directory() -> Path | None:
+    """Find the newest saved experiment when the app has been restarted."""
+
+    results_dir = ProjectPaths.discover().experiment_results_dir
+    if not results_dir.is_dir():
+        return None
+
+    run_directories = [
+        path
+        for path in results_dir.iterdir()
+        if path.is_dir()
+        and (path / "pipeline_config.json").is_file()
+    ]
+    if not run_directories:
+        return None
+
+    return max(
+        run_directories,
+        key=lambda path: path.stat().st_mtime,
+    )
+
+
+def resolve_run_directory(controller: PipelineController) -> Path | None:
+    """Prefer the current controller run, otherwise show the latest saved run."""
+
+    current = controller.run_directory()
+    return current if current is not None else get_latest_run_directory()
+
 
 def read_json(path: Path) -> dict:
     """Read a JSON object, returning an empty mapping when unavailable."""
