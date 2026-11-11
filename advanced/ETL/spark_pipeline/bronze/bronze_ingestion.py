@@ -43,7 +43,7 @@ class BronzeIngestion:
     )
 
     PLATE_WORKER_PATTERN = re.compile(
-        r"plates_detected_worker([1-9]\\d*)\\.csv"
+        r"plates_detected_worker([1-9]\d*)\.csv"
     )
 
     REQUIRED_COLUMNS = {
