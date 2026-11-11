@@ -190,10 +190,42 @@ def source_caption(loaded_at, time_range: str) -> None:
 
 
 def show_data_error(exc: Exception, section: str) -> None:
-    st.error(f"Unable to load {section.lower()} from the Gold layer.")
-    st.info(
-        "Check that the Bronze → Silver → Gold ETL has completed and that "
-        "the local Spark/Hive metastore is available."
-    )
+    details = str(exc)
+
+    if (
+        "NativeIO$Windows.access0" in details
+        or "UnsatisfiedLinkError" in details
+    ):
+        st.error(
+            f"Unable to load {section.lower()}: Hadoop's Windows native "
+            "file-access function could not be linked."
+        )
+        st.info(
+            "This is a Windows Spark/Hadoop runtime issue, not a Kafka "
+            "pipeline failure. Confirm that HADOOP_HOME points to the "
+            "intended Hadoop installation and that its bin directory "
+            "contains winutils.exe, hadoop.dll and hdfs.dll. Those native "
+            "binaries must match the Hadoop version bundled with the "
+            "PySpark installation."
+        )
+        st.code(
+            '$env:PATH = "$env:HADOOP_HOME\\bin;$env:PATH"\n'
+            'Get-ChildItem .\\.venv\\Lib\\site-packages\\pyspark\\jars\\hadoop-*.jar | '
+            'Select-Object -ExpandProperty Name',
+            language="powershell",
+        )
+        st.caption(
+            "After correcting the native binaries, close every Streamlit, "
+            "Python and Spark/Jupyter process and launch the app again from "
+            "the updated PowerShell session. A running JVM cannot reload "
+            "Hadoop native libraries."
+        )
+    else:
+        st.error(f"Unable to load {section.lower()} from the Gold layer.")
+        st.info(
+            "Check that the Bronze → Silver → Gold ETL has completed and "
+            "that the local Spark/Hive metastore is available."
+        )
+
     with st.expander("Technical details"):
         st.exception(exc)
