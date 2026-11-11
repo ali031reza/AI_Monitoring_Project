@@ -96,3 +96,17 @@ class ProjectPaths:
     @property
     def spark_temp_dir(self) -> Path:
         return self.etl_dir / ".spark-temp"
+
+    
+    # ========================================================
+    # VIDEO SOURCES
+    # ========================================================
+
+    @property
+    def camera_sample_dir(self) -> Path:
+        return self.advanced_dir.parent / "Camera_sample"
+
+    @property
+    def camera_sample_video(self) -> Path:
+        return self.camera_sample_dir / "TEST.mp4"
+

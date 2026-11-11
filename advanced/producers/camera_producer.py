@@ -4,10 +4,11 @@ Kafka producer for simulated camera frames.
 
 Responsibilities:
 - Manage the Kafka producer lifecycle.
-- Generate frames for enabled cameras.
+- Read frames from enabled camera video sources.
 - Route frames to the appropriate Kafka topic.
 - Attach camera metadata to Kafka messages.
 - Handle asynchronous delivery callbacks.
+- Manage video source lifecycle and producer shutdown.
 - Manage producer shutdown and pending messages.
 
 Application settings and camera configurations are injected
@@ -32,7 +33,7 @@ from advanced.config import (
     load_settings,
 )
 
-from advanced.producers.mock_frame import generate_mock_jpeg
+from advanced.producers.video_frame_source import VideoFrameSource
 
 
 # ============================================================
@@ -43,7 +44,6 @@ logger = logging.getLogger(__name__)
 
 QUEUE_FULL_RETRY_SECONDS = 10.0
 DEFAULT_FLUSH_TIMEOUT_SECONDS = 20.0
-
 
 
 # ============================================================
@@ -65,7 +65,7 @@ class DeliveryStats:
 
 class CameraProducer:
     """
-    Manage camera frame generation and Kafka delivery.
+    Manage camera video sources and Kafka delivery.
 
     Dependencies:
         settings:
@@ -138,9 +138,10 @@ class CameraProducer:
             for camera in camera_list
             if camera.enabled
         )
+
         self._camera_by_id = {
-        camera.camera_id: camera
-        for camera in self.cameras
+            camera.camera_id: camera
+            for camera in self.cameras
         }
 
         if not self.cameras:
@@ -190,6 +191,29 @@ class CameraProducer:
         else:
             # Dependency injection for tests or custom setups.
             self._producer = producer
+
+        # ----------------------------------------------------
+        # Initialize camera video sources
+        # ----------------------------------------------------
+
+        self._video_sources: dict[str, VideoFrameSource] = {}
+
+        try:
+
+            for camera in self.cameras:
+
+                self._video_sources[camera.camera_id] = (
+                    VideoFrameSource(
+                        camera_id=camera.camera_id,
+                        settings=self.settings,
+                    )
+                )
+
+        except Exception:
+
+            self.release_video_sources()
+
+            raise
 
         logger.info(
             "Camera producer initialized with %d enabled cameras",
@@ -345,7 +369,7 @@ class CameraProducer:
         frame_number: int,
     ) -> int:
         """
-        Generate and queue one frame for every enabled camera.
+        Read and queue one frame for every enabled camera.
 
         Returns:
             Number of successfully queued messages.
@@ -377,12 +401,12 @@ class CameraProducer:
                 camera.detector_type
             ]
 
-            # Generate the synthetic camera frame.
-            jpeg_bytes = generate_mock_jpeg(
-                camera=camera,
-                camera_settings=self.settings.camera,
-                frame_number=frame_number,
-            )
+            # Read the next JPEG frame from the camera video.
+            video_source = self._video_sources[
+                camera.camera_id
+            ]
+
+            jpeg_bytes = video_source.read_jpeg()
 
             # Queue the frame.
             self._enqueue_message(
@@ -453,12 +477,30 @@ class CameraProducer:
         return remaining
 
     # ========================================================
-    # 9. CONTINUOUS CAMERA STREAMING
+    # 9. RELEASE VIDEO SOURCES
+    # ========================================================
+
+    def release_video_sources(self) -> None:
+        """Release all active camera video sources."""
+
+        for camera_id, video_source in self._video_sources.items():
+
+            video_source.release()
+
+            logger.info(
+                "Video source stopped | Camera: %s",
+                camera_id,
+            )
+
+        self._video_sources.clear()
+
+    # ========================================================
+    # 10. CONTINUOUS CAMERA STREAMING
     # ========================================================
 
     def run_forever(self) -> None:
         """
-        Continuously generate and publish camera frames.
+        Continuously read and publish camera video frames.
 
         The frame interval is measured between the start of
         consecutive rounds, avoiding unnecessary additional
@@ -517,26 +559,32 @@ class CameraProducer:
 
         finally:
 
-            logger.info(
-                "Flushing pending Kafka messages..."
-            )
+            try:
 
-            remaining = self.flush()
+                logger.info(
+                    "Flushing pending Kafka messages..."
+                )
 
-            stats = self.delivery_stats
+                remaining = self.flush()
 
-            logger.info(
-                "Producer shutdown | Queued: %d | "
-                "Delivered: %d | Failed: %d | Pending: %d",
-                stats.queued,
-                stats.delivered,
-                stats.failed,
-                remaining,
-            )
+                stats = self.delivery_stats
+
+                logger.info(
+                    "Producer shutdown | Queued: %d | "
+                    "Delivered: %d | Failed: %d | Pending: %d",
+                    stats.queued,
+                    stats.delivered,
+                    stats.failed,
+                    remaining,
+                )
+
+            finally:
+
+                self.release_video_sources()
 
 
 # ============================================================
-# 10. APPLICATION ENTRY POINT
+# 11. APPLICATION ENTRY POINT
 # ============================================================
 
 def main() -> None:
