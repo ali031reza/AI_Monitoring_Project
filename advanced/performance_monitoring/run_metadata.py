@@ -7,11 +7,13 @@ Responsibilities:
 - Record enabled camera configurations.
 - Record Kafka topics and partition assignments.
 - Record detector worker counts and processing delays.
+- Store YOLO11n benchmark-based reference estimates.
 - Record the current Git revision.
 - Save metadata as a JSON file for each experiment.
 
-Metadata describes the experimental configuration.
-It does not collect runtime performance measurements.
+Metadata describes the experimental configuration and external
+reference estimates. It does not collect hardware utilization or
+execute YOLO inference.
 """
 
 from __future__ import annotations
@@ -68,7 +70,8 @@ YOLO_REFERENCE = {
     },
     "source_url": "https://docs.ultralytics.com/models/yolo11/",
     "note": (
-        "Published model-only benchmark and weight-size reference. "
+        "CPU/GPU latency values are published model-only benchmarks. "
+        "Weight memory is derived from parameter count and precision. "
         "YOLO inference is not executed by this project."
     ),
 }
