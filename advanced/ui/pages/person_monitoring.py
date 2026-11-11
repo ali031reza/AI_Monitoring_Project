@@ -217,10 +217,10 @@ def _display_history(frame: pd.DataFrame) -> pd.DataFrame:
 
 def render_person_monitoring() -> None:
     page_header(
-        "Investigations / People",
+        "Operations / Person Monitoring",
         "Person monitoring",
-        "Search registered employees, inspect their person-detection history, "
-        "and distinguish physical observations from registered-plate associations.",
+        "Monitor the live person Kafka topic, inspect per-worker throughput and lag, "
+        "and review persisted employee observations.",
     )
 
     controller = get_pipeline_controller()
