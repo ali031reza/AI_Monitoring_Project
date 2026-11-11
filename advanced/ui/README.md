@@ -114,8 +114,25 @@ partition. It does not report broker host I/O or CPU/RAM/GPU utilization.
 The detector workers use mock simulation with a 30 ms delay; no YOLO
 inference is executed.
 
-The existing Overview, Person Monitoring, Access Review and related pages
-remain backed by the Gold/Spark layer. The Kafka Pipeline page can be used
+The **Overview** and **Person Monitoring** pages now read the same saved
+`pipeline_config.json`, run metadata and JSONL metrics as the Kafka Pipeline
+page. They share the same cached `PipelineController` instance through
+`advanced/ui/pipeline_state.py`.
+
+- **Overview** summarizes the complete run: selected camera/FPS/worker
+  configuration, producer throughput, person and plate processing rates,
+  consumer lag, worker metrics and YOLO11n reference assumptions.
+- **Person Monitoring** focuses on the person topic: person-camera assignments,
+  target input rate, per-worker throughput and latency, person partition lag,
+  and the person-topic throughput history.
+- Both pages retain the persisted Gold employee/observation analytics as
+  separate historical sections. Those Gold sections still require the Spark
+  runtime described above.
+
+The camera count, FPS and worker controls remain centralized on the
+**Kafka Pipeline** page. The Overview and Person Monitoring pages are
+read-only views of the selected/latest saved run configuration; they do not
+start another producer or detector process. The Kafka live views can be used
 without opening a Spark session.
 
 
