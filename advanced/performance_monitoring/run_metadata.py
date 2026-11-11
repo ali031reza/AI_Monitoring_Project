@@ -7,7 +7,6 @@ Responsibilities:
 - Record enabled camera configurations.
 - Record Kafka topics and partition assignments.
 - Record detector worker counts and processing delays.
-- Store YOLO11n reference benchmark assumptions.
 - Record the current Git revision.
 - Save metadata as a JSON file for each experiment.
 
