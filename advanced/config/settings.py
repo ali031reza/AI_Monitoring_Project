@@ -121,7 +121,7 @@ class KafkaSettings:
 class CameraSettings:
     """Camera frame generation and image compression settings."""
 
-    frame_interval_seconds: float = 1.0
+    frame_interval_seconds: float = 1/12
 
     frame_width: int = 640
     frame_height: int = 360
