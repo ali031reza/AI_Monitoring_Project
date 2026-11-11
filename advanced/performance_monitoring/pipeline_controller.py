@@ -240,14 +240,6 @@ class PipelineController:
                 plate_partitions=actual_partitions["plate"],
             )
 
-            person_camera_count = sum(
-                camera.detector_type == "person"
-                for camera in cameras
-            )
-            plate_camera_count = sum(
-                camera.detector_type == "plate"
-                for camera in cameras
-            )
             run_id = datetime.now(timezone.utc).strftime(
                 "run_%Y%m%d_%H%M%S_%f"
             )
