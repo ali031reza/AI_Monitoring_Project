@@ -244,6 +244,13 @@ class PipelineController:
             run_id = datetime.now(timezone.utc).strftime(
                 "run_%Y%m%d_%H%M%S_%f"
             )
+            environment["PERSON_DETECTOR_GROUP_ID"] = (
+                f"person-detectors-{run_id}"
+            )
+            environment["PLATE_DETECTOR_GROUP_ID"] = (
+                f"plate-detectors-{run_id}"
+            )
+            settings = load_settings(environ=environment)
             run_dir = settings.paths.experiment_run_dir(run_id)
             run_dir.mkdir(parents=True, exist_ok=False)
 
