@@ -46,8 +46,26 @@ hr { border-color: #223248 !important; }
     min-height: 138px;
     box-shadow: 0 10px 34px rgba(0,0,0,.09);
 }
-[data-testid="stMetricLabel"] { color: #a6b8d0; font-size: .88rem; }
-[data-testid="stMetricValue"] { color: #f6f9fd; font-weight: 760; letter-spacing: -.04em; }
+[data-testid="stMetricLabel"] {
+    color: #a6b8d0;
+    font-size: .84rem;
+    line-height: 1.3;
+}
+[data-testid="stMetricValue"] {
+    color: #f6f9fd;
+    font-size: clamp(1.2rem, 1.55vw, 1.65rem) !important;
+    font-weight: 760;
+    letter-spacing: -.035em;
+    line-height: 1.15;
+    white-space: normal !important;
+    overflow: visible !important;
+}
+[data-testid="stMetricValue"] > div {
+    white-space: normal !important;
+    overflow-wrap: anywhere;
+    text-overflow: clip !important;
+}
+[data-testid="stMetric"] { min-width: 0; }
 [data-testid="stMetricDelta"] { color: #74d7be; }
 [data-testid="stVerticalBlockBorderWrapper"] > div {
     border-color: #273b53 !important;
