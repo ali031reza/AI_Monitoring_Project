@@ -138,6 +138,33 @@ def _render_pipeline_overview(run_id: str, run_directory: str) -> None:
         _metric_value(target_plate),
     )
 
+    payload_col, queue_col, delivery_col, person_latency_col, plate_latency_col = (
+        st.columns(5)
+    )
+    payload_col.metric(
+        "Producer payload · MB/s",
+        _metric_value(
+            (rates.get("producer_bytes") or 0) / (1024 * 1024)
+        ),
+    )
+    queue_col.metric(
+        "Producer queue · messages",
+        "—" if rates.get("producer_queue") is None
+        else f"{int(rates['producer_queue']):,}",
+    )
+    delivery_col.metric(
+        "Delivery p95 · ms",
+        _metric_value(rates.get("producer_delivery_p95")),
+    )
+    person_latency_col.metric(
+        "Person processing p95 · ms",
+        _metric_value(rates.get("person_processing_p95")),
+    )
+    plate_latency_col.metric(
+        "Plate processing p95 · ms",
+        _metric_value(rates.get("plate_processing_p95")),
+    )
+
     section_heading("Run configuration", "Values shared by the producer and all detector workers")
     config_rows = [
         {"Setting": "Camera count", "Value": camera_count},
