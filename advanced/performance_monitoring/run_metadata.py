@@ -42,39 +42,6 @@ from advanced.config import (
 # 1. LOGGING AND CONSTANTS
 # ============================================================
 
-YOLO_REFERENCE = {
-    "model": "YOLO11n",
-    "parameters_millions": 2.6,
-    "flops_billions": 6.5,
-    "input_resolution": {
-        "width": 640,
-        "height": 640,
-    },
-    "batch_size": 1,
-    "cpu_benchmark": {
-        "device": "CPU",
-        "backend": "ONNX",
-        "latency_ms_per_image": 56.1,
-    },
-    "gpu_benchmark": {
-        "device": "NVIDIA T4",
-        "backend": "TensorRT 10",
-        "latency_ms_per_image": 1.5,
-    },
-    "weight_memory_estimate_mb": {
-        "fp32_per_instance": 10.4,
-        "fp16_per_instance": 5.2,
-    },
-    "source_url": (
-        "https://docs.ultralytics.com/models/yolo11/"
-    ),
-    "note": (
-        "Reference benchmark assumptions only. "
-        "YOLO inference is not executed by this project."
-    ),
-}
-
-
 DETECTOR_TYPES = ("person", "plate")
 
 
@@ -432,52 +399,7 @@ def _collect_worker_metadata(
 # 8. YOLO REFERENCE METADATA
 # ============================================================
 
-def _collect_yolo_metadata(
-    total_worker_count: int,
-) -> dict[str, Any]:
-    """
-    Collect fixed YOLO reference assumptions.
-
-    One model instance per declared worker is assumed.
-    These values are not measured by the application.
-    """
-
-    reference = dict(YOLO_REFERENCE)
-
-    fp32_per_instance = (
-        reference["weight_memory_estimate_mb"]
-        ["fp32_per_instance"]
-    )
-
-    fp16_per_instance = (
-        reference["weight_memory_estimate_mb"]
-        ["fp16_per_instance"]
-    )
-
-    reference["assumed_model_instances"] = (
-        total_worker_count
-    )
-
-    reference["weight_memory_estimate_mb"] = {
-        "fp32_per_instance": fp32_per_instance,
-        "fp32_all_instances": (
-            fp32_per_instance * total_worker_count
-        ),
-        "fp16_per_instance": fp16_per_instance,
-        "fp16_all_instances": (
-            fp16_per_instance * total_worker_count
-        ),
-    }
-
-    reference["memory_scope"] = (
-        "Model weights only. Excludes runtime, "
-        "activation buffers and framework overhead."
-    )
-
-    return reference
-
-
-# ============================================================
+# ========================================================
 # 9. BUILD RUN METADATA
 # ============================================================
 
@@ -532,10 +454,6 @@ def build_run_metadata(
 
     camera_list = _validate_cameras(cameras)
 
-    total_workers = sum(
-        worker_counts.values()
-    )
-
     project_root = settings.paths.advanced_dir.parent
 
     return {
@@ -571,21 +489,17 @@ def build_run_metadata(
             processing_delays_seconds,
         ),
 
-        "yolo_reference": _collect_yolo_metadata(
-            total_workers
-        ),
-
         "measurement_policy": {
             "kafka_and_application_metrics": (
-                "Collected from actual application execution."
+                "Collected from actual producer and consumer execution."
             ),
-
-            "yolo_resource_metrics": (
-                "Reference benchmark estimates, not measured."
+            "host_resource_metrics": (
+                "CPU, RAM and GPU utilization are not collected by the "
+                "current mock detector implementation."
             ),
-
-            "full_ram_and_vram": (
-                "Not estimated or reported as measured."
+            "inference_metrics": (
+                "The detector workers simulate processing; no YOLO model "
+                "is executed."
             ),
         },
     }
