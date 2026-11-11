@@ -43,6 +43,36 @@ from advanced.config import (
 
 DETECTOR_TYPES = ("person", "plate")
 
+YOLO_REFERENCE = {
+    "model": "YOLO11n",
+    "parameters_millions": 2.6,
+    "flops_billions": 6.5,
+    "input_resolution": {
+        "width": 640,
+        "height": 640,
+    },
+    "batch_size": 1,
+    "cpu_benchmark": {
+        "device": "CPU",
+        "backend": "ONNX",
+        "latency_ms_per_image": 56.1,
+    },
+    "gpu_benchmark": {
+        "device": "NVIDIA T4",
+        "backend": "TensorRT 10",
+        "latency_ms_per_image": 1.5,
+    },
+    "weight_memory_estimate_mb": {
+        "fp32_per_instance": 10.4,
+        "fp16_per_instance": 5.2,
+    },
+    "source_url": "https://docs.ultralytics.com/models/yolo11/",
+    "note": (
+        "Published model-only benchmark and weight-size reference. "
+        "YOLO inference is not executed by this project."
+    ),
+}
+
 
 # ============================================================
 # 2. VALIDATION HELPERS
@@ -73,10 +103,10 @@ def _validate_worker_configuration(
         if (
             isinstance(count, bool)
             or not isinstance(count, int)
-            or count < 1
+            or not 1 <= count <= 20
         ):
             raise ValueError(
-                f"Invalid worker count for {detector_type}"
+                f"Worker count for {detector_type} must be between 1 and 20"
             )
 
         delay = processing_delays_seconds[detector_type]
@@ -394,6 +424,91 @@ def _collect_worker_metadata(
     }
 
 
+def build_yolo_reference_estimate(
+    person_workers: int,
+    plate_workers: int,
+) -> dict[str, Any]:
+    """
+    Build a benchmark-based YOLO11n reference estimate.
+
+    The memory estimate covers model weights only. It is not a
+    measurement of complete process RAM or GPU memory usage.
+    """
+
+    worker_counts = {
+        "person": person_workers,
+        "plate": plate_workers,
+    }
+    for detector, count in worker_counts.items():
+        if (
+            isinstance(count, bool)
+            or not isinstance(count, int)
+            or not 1 <= count <= 20
+        ):
+            raise ValueError(
+                f"{detector} workers must be between 1 and 20"
+            )
+
+    total_workers = sum(worker_counts.values())
+    cpu_latency = YOLO_REFERENCE["cpu_benchmark"][
+        "latency_ms_per_image"
+    ]
+    gpu_latency = YOLO_REFERENCE["gpu_benchmark"][
+        "latency_ms_per_image"
+    ]
+    fp32_per_worker = YOLO_REFERENCE["weight_memory_estimate_mb"][
+        "fp32_per_instance"
+    ]
+    fp16_per_worker = YOLO_REFERENCE["weight_memory_estimate_mb"][
+        "fp16_per_instance"
+    ]
+
+    return {
+        "model": YOLO_REFERENCE["model"],
+        "input_resolution": dict(YOLO_REFERENCE["input_resolution"]),
+        "batch_size": YOLO_REFERENCE["batch_size"],
+        "parameters_millions": YOLO_REFERENCE["parameters_millions"],
+        "flops_billions": YOLO_REFERENCE["flops_billions"],
+        "worker_instances": {
+            **worker_counts,
+            "total": total_workers,
+        },
+        "cpu_benchmark": {
+            **YOLO_REFERENCE["cpu_benchmark"],
+            "idealized_images_per_second_per_worker": round(
+                1000.0 / cpu_latency,
+                2,
+            ),
+        },
+        "gpu_benchmark": {
+            **YOLO_REFERENCE["gpu_benchmark"],
+            "idealized_images_per_second_per_worker": round(
+                1000.0 / gpu_latency,
+                2,
+            ),
+        },
+        "model_weight_memory_estimate_mb": {
+            "fp32_per_worker": fp32_per_worker,
+            "fp32_all_workers": round(
+                fp32_per_worker * total_workers,
+                2,
+            ),
+            "fp16_per_worker": fp16_per_worker,
+            "fp16_all_workers": round(
+                fp16_per_worker * total_workers,
+                2,
+            ),
+        },
+        "memory_scope": (
+            "Model weights only. Excludes Python/runtime overhead, "
+            "activations, input buffers, preprocessing and postprocessing."
+        ),
+        "source_url": YOLO_REFERENCE["source_url"],
+        "measurement_status": "reference_estimate_not_measured",
+        "note": YOLO_REFERENCE["note"],
+    }
+
+
 # ========================================================
 # 8. BUILD RUN METADATA
 # ========================================================
@@ -482,6 +597,11 @@ def build_run_metadata(
         "detector_workers": _collect_worker_metadata(
             worker_counts,
             processing_delays_seconds,
+        ),
+
+        "yolo_reference": build_yolo_reference_estimate(
+            worker_counts["person"],
+            worker_counts["plate"],
         ),
 
         "measurement_policy": {
