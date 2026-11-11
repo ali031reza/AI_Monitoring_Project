@@ -610,10 +610,12 @@ with st.container(border=True):
     st.caption(
         f"Assumes one YOLO11n 640×640, batch-1 instance per worker "
         f"({person_workers} person + {plate_workers} plate = "
-        f"{person_workers + plate_workers} total). Weight-only estimates: "
-        "10.4 MB FP32 and 5.2 MB FP16 per instance. Full runtime RAM/VRAM, "
-        "CPU utilization and GPU utilization are not inferred from these "
-        "benchmarks and are not measured by the mock detectors."
+        f"{person_workers + plate_workers} total). The RAM (FP32) and "
+        "VRAM (FP16) totals are alternative deployment paths, not additive. "
+        "They include model weights only: 10.4 MB FP32 or 5.2 MB FP16 per "
+        "instance. Full runtime RAM/VRAM and CPU/GPU utilization cannot be "
+        "inferred from these model-only benchmarks and are not measured by "
+        "the mock detectors."
     )
     st.markdown(
         "[Benchmark source: Ultralytics YOLO11](https://docs.ultralytics.com/models/yolo11/)"
