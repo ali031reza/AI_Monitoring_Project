@@ -150,6 +150,12 @@ def create_pipeline_config(
         if isinstance(value, bool) or not isinstance(value, int) or value < 1:
             raise ValueError(f"{name} must be a positive integer")
 
+    if not 1 <= person_workers <= 20:
+        raise ValueError("person_workers must be between 1 and 20")
+
+    if not 1 <= plate_workers <= 20:
+        raise ValueError("plate_workers must be between 1 and 20")
+
     if person_partitions < person_workers:
         raise ValueError("Person partitions must be at least the person worker count")
 
