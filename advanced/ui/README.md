@@ -77,3 +77,43 @@ reflects the most recently persisted Gold tables.
 A plate-to-employee match is an association and is not evidence that the
 employee was physically present. Raw detections are not automatically
 classified as security alerts.
+
+
+## Kafka Pipeline page
+
+The **Kafka Pipeline** page is a live local-process control panel. It does
+not connect to Spark or the Gold tables.
+
+From the repository root, start the UI with:
+
+```powershell
+python -m streamlit run advanced/ui/app.py
+```
+
+Before starting a run:
+
+1. Start the Kafka broker configured by `KAFKA_BOOTSTRAP_SERVERS`.
+2. Confirm that `Camera_sample/TEST.mp4` exists and is readable.
+3. Open **Kafka Pipeline**, choose the camera count, FPS, person workers
+   and plate workers, then select **Start pipeline**.
+
+The controller starts detector consumers first, starts a committed-offset
+lag monitor, and starts the camera producer last. It provisions missing
+topics and increases topic partition counts when needed. Kafka partition
+counts cannot be decreased; a later run with fewer workers retains the
+existing partitions.
+
+Each run writes its configuration, metadata, process logs and JSONL
+metrics under `advanced/experiment_results/<run_id>/`. These are local
+experiment artifacts and are intentionally excluded from Git.
+
+The page reports measured application metrics: producer message and byte
+throughput, delivery latency, producer queue depth, per-worker receive and
+processing rates, processing/commit latency, and committed lag by
+partition. It does not report broker host I/O or CPU/RAM/GPU utilization.
+The detector workers use mock simulation with a 30 ms delay; no YOLO
+inference is executed.
+
+The existing Overview, Person Monitoring, Access Review and related pages
+remain backed by the Gold/Spark layer. The Kafka Pipeline page can be used
+without opening a Spark session.
