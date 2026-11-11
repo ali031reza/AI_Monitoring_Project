@@ -36,6 +36,11 @@ from advanced.config import (
 
 from advanced.producers.video_frame_source import VideoFrameSource
 from advanced.performance_monitoring.metrics_collector import MetricsCollector
+from advanced.performance_monitoring.pipeline_config import (
+    cameras_from_config,
+    load_pipeline_config,
+    load_run_settings,
+)
 
 
 # ============================================================
@@ -659,9 +664,7 @@ class CameraProducer:
 # ============================================================
 
 def main() -> None:
-    """
-    Initialize the application dependencies once and start streaming.
-    """
+    """Initialize dependencies and start the camera producer."""
 
     parser = argparse.ArgumentParser(
         description="Run the Kafka camera producer."
@@ -669,7 +672,11 @@ def main() -> None:
     parser.add_argument(
         "--run-id",
         default="run_001",
-        help="Experiment run ID (default: run_001).",
+        help="Experiment run ID for standalone execution.",
+    )
+    parser.add_argument(
+        "--config-path",
+        help="Shared pipeline configuration created by the scaling dashboard.",
     )
     args = parser.parse_args()
 
@@ -683,25 +690,25 @@ def main() -> None:
         ),
     )
 
-    # Load application settings once.
-    settings = load_settings()
+    if args.config_path:
+        pipeline_config = load_pipeline_config(args.config_path)
+        settings = load_run_settings(pipeline_config)
+        cameras = cameras_from_config(pipeline_config)
+        run_id = pipeline_config["run_id"]
+    else:
+        settings = load_settings()
+        cameras = load_cameras(settings.paths.cameras_csv)
+        run_id = args.run_id
 
-    # Load camera configurations once.
-    cameras = load_cameras(
-        settings.paths.cameras_csv
-    )
-
-    # Create run-scoped producer metrics.
     metrics_collector = MetricsCollector(
         output_path=(
-            settings.paths.experiment_run_dir(args.run_id)
+            settings.paths.experiment_run_dir(run_id)
             / "producer_metrics.jsonl"
         ),
-        run_id=args.run_id,
+        run_id=run_id,
         component="producer",
     )
 
-    # Inject dependencies into the producer.
     camera_producer = CameraProducer(
         settings=settings,
         cameras=cameras,
