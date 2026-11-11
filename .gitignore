@@ -102,3 +102,7 @@ Thumbs.db
 # Generated build files
 build/
 dist/
+
+# Generated Kafka experiment runs and detector outputs
+advanced/experiment_results/
+advanced/data/
