@@ -314,7 +314,9 @@ class PlateDetector:
                 ),
 
                 "client.id": (
-                    f"ai-monitoring-plate-detector-{worker_id}"
+                    "ai-monitoring-plate-detector"
+                    if worker_id == "worker1"
+                    else f"ai-monitoring-plate-detector-{worker_id}"
                 ),
 
                 "auto.offset.reset": "latest",
