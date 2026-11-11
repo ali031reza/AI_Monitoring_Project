@@ -35,6 +35,7 @@ apply_theme()
 pages = {
     "OPERATIONS": [
         st.Page("pages/dashboard.py", title="Overview", icon="📊", default=True),
+        st.Page("pages/kafka_pipeline.py", title="Kafka Pipeline", icon="📈"),
         st.Page("pages/events_alerts.py", title="Observation Explorer", icon="📋"),
         st.Page("pages/camera_monitoring.py", title="Camera Inventory", icon="📹"),
     ],
