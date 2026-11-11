@@ -21,7 +21,7 @@ st.set_page_config(
     layout="wide",
     initial_sidebar_state="expanded",
     menu_items={
-        "About": "AI Monitoring · Read-only operational analytics over persisted Gold tables.",
+        "About": "AI Monitoring · Gold analytics and live Kafka pipeline operations.",
     },
 )
 
@@ -34,8 +34,8 @@ apply_theme()
 
 pages = {
     "OPERATIONS": [
-        st.Page("pages/dashboard.py", title="Overview", icon="📊", default=True),
-        st.Page("pages/kafka_pipeline.py", title="Kafka Pipeline", icon="📈"),
+        st.Page("pages/kafka_pipeline.py", title="Kafka Pipeline", icon="📈", default=True),
+        st.Page("pages/dashboard.py", title="Overview", icon="📊"),
         st.Page("pages/events_alerts.py", title="Observation Explorer", icon="📋"),
         st.Page("pages/camera_monitoring.py", title="Camera Inventory", icon="📹"),
     ],
@@ -59,13 +59,13 @@ selected_page = st.navigation(pages, position="sidebar")
 with st.sidebar:
     st.markdown(
         '<div class="app-sidebar-line">'
-        '<div class="app-mini-label">DATA CONNECTION</div>'
+        '<div class="app-mini-label">DATA CONNECTIONS</div>'
         '<div style="font-size:.84rem;color:#d4e2ef;margin-top:.4rem">'
-        'Gold · Spark / Hive</div>'
+        'Kafka · Live pipeline metrics</div>'
         '<div style="font-size:.76rem;color:#8098b2;margin-top:.35rem">'
-        'Persisted observations · Read only</div></div>',
+        'Gold · Spark / Hive analytics</div></div>',
         unsafe_allow_html=True,
     )
-    st.caption("Data refresh is not a camera heartbeat or ETL job trigger.")
+    st.caption("Kafka controls run local producer and detector processes; Gold pages remain read-only.")
 
 selected_page.run()
