@@ -51,7 +51,7 @@ def _configure_runtime_environment() -> None:
         )
 
     # --------------------------------------------------------
-    # 2. Configure optional Hadoop utilities on Windows
+    # 2. Configure required Hadoop native libraries on Windows
     # --------------------------------------------------------
 
     if os.name == "nt":
@@ -103,6 +103,7 @@ def _configure_runtime_environment() -> None:
     # --------------------------------------------------------
 
     os.environ["PYSPARK_PYTHON"] = sys.executable
+
 
 def create_spark_session():
     """Create or retrieve the project's Hive-enabled local Spark session.
