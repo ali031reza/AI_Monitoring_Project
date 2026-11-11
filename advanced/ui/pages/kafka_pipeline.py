@@ -9,6 +9,7 @@ import pandas as pd
 import streamlit as st
 
 from advanced.config import ProjectPaths, load_cameras
+from advanced.performance_monitoring.pipeline_controller import PipelineController
 from advanced.performance_monitoring.run_metadata import (
     build_yolo_reference_estimate,
 )
