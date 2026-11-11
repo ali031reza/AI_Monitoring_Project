@@ -17,6 +17,7 @@ from __future__ import annotations
 import csv
 import json
 import logging
+import time
 import math
 
 from collections.abc import Iterable
@@ -53,7 +54,7 @@ CSV_FIELDS = (
     "event_id",
     "detector_type",
 )
-
+DETECTOR_PROCESSING_DELAY_SECONDS = 0.030
 
 # ============================================================
 # 2. KAFKA MESSAGE HELPERS
@@ -462,7 +463,7 @@ class PlateDetector:
             camera_id=camera_id,
             timestamp=timestamp,
         )
-
+        time.sleep(DETECTOR_PROCESSING_DELAY_SECONDS)
         # ----------------------------------------------------
         # Generate event ID
         # ----------------------------------------------------

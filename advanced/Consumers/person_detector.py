@@ -18,6 +18,7 @@ from __future__ import annotations
 
 import csv
 import json
+import time
 import logging
 
 from pathlib import Path
@@ -55,7 +56,7 @@ CSV_FIELDS = (
     "event_id",
     "detector_type",
 )
-
+DETECTOR_PROCESSING_DELAY_SECONDS = 0.030
 
 # ============================================================
 # 2. KAFKA MESSAGE HELPERS
@@ -396,7 +397,7 @@ class PersonDetector:
             camera_id=camera_id,
             timestamp=timestamp,
         )
-
+        time.sleep(DETECTOR_PROCESSING_DELAY_SECONDS)
         authorization = [
             is_authorized(
                 employee_id=employee_id,
