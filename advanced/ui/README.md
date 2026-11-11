@@ -35,8 +35,24 @@ Then run Streamlit:
 ```
 
 The Windows Hadoop directory is expected to contain `bin\winutils.exe`,
-`bin\hadoop.dll`, and `bin\hdfs.dll`, matching the checks in the ETL
-notebooks.
+`bin\hadoop.dll`, and `bin\hdfs.dll`. The native DLLs must match the
+Hadoop version bundled inside the active virtual environment's PySpark
+installation; a different Hadoop release on `PATH` can produce
+`UnsatisfiedLinkError` failures such as
+`NativeIO$Windows.access0`. The Spark startup code validates the required
+files, places this Hadoop `bin` directory first on `PATH`, and registers
+it for Windows DLL dependency resolution.
+
+To inspect the Hadoop jars used by the active virtual environment:
+
+```powershell
+Get-ChildItem .\.venv\Lib\site-packages\pyspark\jars\hadoop-*.jar |
+    Select-Object -ExpandProperty Name
+```
+
+If native-library linkage fails, stop every Streamlit, Python, Spark and
+Jupyter process before correcting the Hadoop binaries and restarting from
+the updated PowerShell environment. A running JVM cannot reload native DLLs.
 
 ## Important: Derby metastore lock
 
