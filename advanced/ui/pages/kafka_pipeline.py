@@ -445,8 +445,11 @@ controller = get_pipeline_controller()
 person_ratio = get_camera_mix()
 
 st.info(
-    "The worker controls are applied to real local processes. Kafka topics are "
-    "created or expanded as needed; partition counts cannot be reduced."
+    "The controls configure a complete run; stop and start a new run to compare "
+    "settings. Stop any producer or detector processes you launched manually "
+    "before starting here. Each dashboard run uses its own consumer groups. "
+    "Kafka topics are created or expanded as needed; partition counts cannot "
+    "be reduced."
 )
 
 with st.container(border=True):
