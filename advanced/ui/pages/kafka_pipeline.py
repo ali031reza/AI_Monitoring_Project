@@ -239,6 +239,7 @@ def _latest_worker_rows(run_dir: Path) -> list[dict]:
                 "Worker": record.get("component", path.stem),
                 "Received/s": rates.get("messages_received", 0),
                 "Processed/s": rates.get("messages_processed", 0),
+                "Committed/s": rates.get("messages_committed", 0),
                 "Processing p95 (ms)": (
                     latency.get("message_processing", {}).get("p95")
                 ),
@@ -278,6 +279,7 @@ def _latest_lag_rows(run_dir: Path) -> tuple[list[dict], int | None]:
                 "Committed offset": partition.get("committed_offset"),
                 "High watermark": partition.get("high_watermark"),
                 "Lag (messages)": partition.get("committed_lag_messages"),
+                "Expired offset gap": partition.get("expired_offset_gap", 0),
                 "Status": partition.get("status", "unknown"),
             })
 
@@ -321,13 +323,26 @@ def _latest_rates(run_dir: Path) -> dict:
     person_p95 = [value for value in person_p95 if value is not None]
     plate_p95 = [value for value in plate_p95 if value is not None]
 
+    producer_counters = producer.get("counters", {})
+    queued_messages = producer_counters.get("messages_queued", 0) or 0
+    queued_bytes = producer_counters.get("payload_bytes", 0) or 0
+    mean_payload_bytes = (
+        queued_bytes / queued_messages
+        if queued_messages
+        else None
+    )
+
     return {
         "producer_frames": producer_rates.get("frames_generated"),
         "producer_delivered": producer_rates.get("messages_delivered"),
         "producer_person_delivered": producer_rates.get("messages_delivered_person"),
         "producer_plate_delivered": producer_rates.get("messages_delivered_plate"),
         "producer_bytes": producer_rates.get("payload_bytes"),
+        "producer_mean_payload_bytes": mean_payload_bytes,
         "producer_queue": producer.get("gauges", {}).get("producer_queue_depth"),
+        "producer_frame_read_p95": (
+            producer_latency.get("frame_read_encode", {}).get("p95")
+        ),
         "producer_delivery_p95": (
             producer_latency.get("producer_delivery", {}).get("p95")
         ),
@@ -369,7 +384,7 @@ def render_live_metrics(run_directory: Path, process_controller: PipelineControl
         "—" if total_lag is None else f"{total_lag:,} messages",
     )
 
-    person_in_col, plate_in_col, bytes_col, queue_col = st.columns(4)
+    person_in_col, plate_in_col, bytes_col, mean_size_col, queue_col = st.columns(5)
     person_in_col.metric(
         "Person topic delivered",
         f"{_number(rates['producer_person_delivered'])} msg/s",
@@ -382,12 +397,20 @@ def render_live_metrics(run_directory: Path, process_controller: PipelineControl
         "Payload queued",
         f"{_number((rates['producer_bytes'] or 0) / (1024 * 1024))} MB/s",
     )
+    mean_size_col.metric(
+        "Mean JPEG payload",
+        f"{_number(rates['producer_mean_payload_bytes'], 0)} bytes",
+    )
     queue_col.metric(
         "Producer queue depth",
         "—" if rates["producer_queue"] is None else f"{int(rates['producer_queue']):,}",
     )
 
-    delivery_col, person_latency_col, plate_latency_col = st.columns(3)
+    frame_col, delivery_col, person_latency_col, plate_latency_col = st.columns(4)
+    frame_col.metric(
+        "Frame read/encode p95",
+        f"{_number(rates['producer_frame_read_p95'])} ms",
+    )
     delivery_col.metric(
         "Delivery p95",
         f"{_number(rates['producer_delivery_p95'])} ms",
