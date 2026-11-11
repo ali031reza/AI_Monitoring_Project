@@ -117,3 +117,10 @@ inference is executed.
 The existing Overview, Person Monitoring, Access Review and related pages
 remain backed by the Gold/Spark layer. The Kafka Pipeline page can be used
 without opening a Spark session.
+
+
+Each dashboard run uses run-specific person and plate consumer-group IDs so
+committed offsets from an earlier experiment do not carry into the next run.
+Stop any producer or detector processes started manually before using the
+dashboard, otherwise they can still publish to or consume from the same Kafka
+topics.
