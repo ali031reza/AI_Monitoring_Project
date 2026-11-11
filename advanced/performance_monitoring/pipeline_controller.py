@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import atexit
 import os
 import signal
 import subprocess
@@ -34,6 +35,7 @@ class PipelineController:
         self._log_handles: dict[str, Any] = {}
         self._active_run_id: str | None = None
         self._lock = threading.RLock()
+        atexit.register(self.stop)
 
     @property
     def active_run_id(self) -> str | None:
@@ -394,8 +396,9 @@ class PipelineController:
                 ordered_names.append("consumer_lag_monitor")
 
             for name in ordered_names:
+                was_running = self._processes[name].poll() is None
                 self._interrupt_process(self._processes[name])
-                if name == "producer":
+                if name == "producer" and was_running:
                     # Give consumers a short window to commit the final
                     # records already accepted by Kafka.
                     time.sleep(2.0)
