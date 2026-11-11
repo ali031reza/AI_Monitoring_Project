@@ -66,6 +66,6 @@ with st.sidebar:
         'Gold · Spark / Hive analytics</div></div>',
         unsafe_allow_html=True,
     )
-    st.caption("Kafka controls run local producer and detector processes; Gold pages remain read-only.")
+    st.caption("Kafka controls run local processes; Overview and Person Monitoring share their live run metrics. Gold analytics remain read-only.")
 
 selected_page.run()
